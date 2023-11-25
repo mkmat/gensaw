@@ -1,0 +1,16 @@
+	subroutine mk_tictoc(millisecond)
+        implicit none
+
+        character (len=8)  cdate
+        character (len=10) ctime
+        character (len=5) czone
+        integer(4) ival(8)
+        integer(4) yr,mon,day,hr,min,sec,ms
+        real*8     millisecond
+
+        call date_and_time(cdate,ctime,czone,ival)
+
+        millisecond = 3600*ival(5) + 60*ival(6) + ival(7) + dble(ival(8))/1000.D0
+
+        return
+        end

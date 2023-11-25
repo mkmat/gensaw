@@ -1,0 +1,11 @@
+        function overlap(x,new)
+        implicit none
+        logical overlap
+        integer chains,N
+        include 'inc.N'
+        real*8 x(0:N,3)
+        integer new
+         overlap=.false.
+        return
+        end
+

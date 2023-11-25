@@ -1,0 +1,27 @@
+        function overlap(x,new)
+        implicit none
+        logical overlap
+        integer chains,N
+        include 'inc.N'
+        integer periodx,periody,periodz
+        include 'inc.periodic'
+        real*8 xlo,xhi,ylo,yhi,zlo,zhi,boxx,boxy,boxz
+        include 'inc.box'
+        real*8 b,d,d2
+        include 'inc.parameter'
+        real*8 x(0:N,3),dist(3),distance2
+        integer i,k,new
+	include 'inc.skip'
+         overlap=.false.
+         do i=new-1-skipmany,0,-1
+          do k=1,3; dist(k)=x(i,k)-x(new,k); enddo
+          dist(1)=dist(1)-anint(periodx*dist(1)/boxx)*boxx
+          dist(2)=dist(2)-anint(periody*dist(2)/boxy)*boxy
+          dist(3)=dist(3)-anint(periodz*dist(3)/boxz)*boxz
+          distance2=dist(1)**2+dist(2)**2+dist(3)**2
+          if (distance2.le.0.9995*d2) then
+           overlap=.true.; return
+          endif
+         enddo
+        return
+        end

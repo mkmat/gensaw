@@ -1,0 +1,2 @@
+#! /usr/bin/perl
+`sed -i'.bak' '1,\$ s/ \\+/ /g; s/^ //g; s/ \$//; s/ \\\*/\\\*/g; s/\\\* /\\\*/g' $ARGV[0]`; `rm -f $ARGV[0].bak`; 

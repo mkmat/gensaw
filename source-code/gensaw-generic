@@ -1,0 +1,1110 @@
+#! PERLCOMMAND
+
+use Term::ANSIColor;
+
+# 5 may 2021 mk@mat.ethz.ch
+
+use Math::Trig;
+
+$instdir 	= "INSTDIR"; 
+$code 		= "gensaw-algorithm";	
+$dir 		= `pwd`; chomp $dir; if ($dir eq $instdir) { print "do not run gensaw from within the installation directory\n"; exit; }; 
+$resolution 	= 10000;
+
+open(C,"<$instdir/inc.compiler"); @COMPILER=<C>; close(C); foreach $i (0 .. $#COMPILER) { chomp $COMPILER[$i]; }; 
+
+sub HEADER { print<<EOF;
+    _____   _____   _    _   _____      _   __        __                                                    __________________
+   / ____| | ____| | \\  | | / ____/    / \\  \\ \\  __  / /                                            __    _/
+  / / ___  | __    |  \\ | | \\_____    / _ \\  \\ \\/  \\/ /       (c) 2021 mk\@mat.ethz.ch              /  \\__/
+  \\ \\___ \\ | ____  | | \\  |  ____ \\  / ___ \\  \\  /\\  /        www.complexfluids.ethz.ch        _  /
+   \\_____/ |_____| |_|  \\_| /_____/ /_/   \\_\\  \\/  \\/_________________________________________/ \\/
+
+EOF
+}; 
+
+sub CITEAS { print<<EOF;
+Related publication: 
+
+O. Weismantel, A. Galata, M. Sadeghi, A. Kroger, M. Kroger,
+Efficient generation of self-avoiding, semiflexible rotational isomeric chain ensembles in bulk, in confined geometries, and on surfaces
+Comput. Phys. Commun. 270 (2021) 108176. % DOI 10.1016/j.cpc.2021.108176
+
+\@article{gensaw, 
+ author = {O. Weismantel and A. Galata and M. Sadeghi and A. Kr\\\"oger and M. Kr\\\"oger}, 
+ title = {Efficient generation of self-avoiding, semiflexible rotational isomeric chain ensembles in bulk, in confined geometries, and on surfaces},
+ journal = {Comput. Phys. Commun.}, 
+ volume = {270},
+ pages = {108176}, 
+ year = {2021},
+ doi = {10.1016/j.cpc.2021.108176}
+}
+EOF
+};
+
+sub VERSION { print<<EOF;
+gensaw version from 5 may 2021. 
+EOF
+};
+
+sub GREEN { print color("green"),$_[0],color("reset"); }; 
+
+sub NOTES { print<<EOF;
+\n--------------------------- NOTES ----------------------\n$NOTE\n--------------------------------------------------------
+EOF
+};
+
+sub USAGE { print<<EOF;
+
+gensaw  -C=<number of chains>
+        -N=<bonds per chain> 
+        -b=<bond length>
+ 	-box=<linear box size>
+	-output=<dump or mol2 or xyz or Z1 or gro or pdb or ee or fn or d[3D|xy|xz|yz|rx|ry|rz]>  
+
+	-anchor0 (the default, all chains anchored at the origin)
+	-anchorPLANE=<area-per-chain> OR 
+	-anchorOCYL=<radius,height>
+	-anchorICYL=<radius,height>
+  	-anchorOSPH=<radius>
+        -anchorISPH=<radius>
+ 	-anchorOCONE=<r_small,r_large,height>
+        -anchorICONE=<r_small,r_large,height>
+	-anchorRANDOM=<monomer number density>
+	-anchor=<filename>
+
+	-confinementNONE (the default, no confinement)
+	-confinementPLANE=<z-value>
+	-confinementAUTO
+	-confinementOCYL=<radius,height>
+	-confinementICYL=<radius,height>
+	-confinementOSPH=<radius>
+	-confinementISPH=<radius>
+	-confinementOCONE=<r_small,r_large,height>
+	-confinementICONE=<r_small,r_large,height>
+	-confinement=<filename>
+
+	-bendRANDOM
+	-bend=<bending angle in DEG>
+	-bendWLC=<bending-stiffness-kb>
+	-bendFUNC=<function-in-terms-of-theta>
+	-bendTABLE=<filename>
+
+	-torsRANDOM
+	-torsTGG=<trans probability>
+	-torsFUNC=<function-in-terms-of-phi>
+	-torsTABLE=<filename>
+
+        [-compile] (do not run)
+	[-clean]
+
+ 	[-d=<monomer diameter>]
+	[-xlo=<lower box bound on x-axis>]
+        [-xhi=<upper box bound on x-axis>]
+        [-ylo=<lower box bound on y-axis>]
+        [-yhi=<upper box bound on y-axis>]
+	[-zlo=<lower box bound on z-axis>]
+        [-zhi=<upper box bound on z-axis>]
+ 	[-tight] (all box sizes automatically determined)
+	[-large] (all box sizes automatically determined)
+  	[-px (creates periodic box in x-direction)] 
+ 	[-py (creates periodic box in y-direction)]
+	[-pz (creates periodic box in z-direction)]
+	[-p (creates periodic box in all directions)]
+        [-12] (allows for overlap between 12-neighbors)
+        [-123] (further allows for overlap between 13-neighbors)
+        [-1234] (further allows for overlap between 14-neighbors)
+	[-X=<X> (manually fixes the branching functionality X)]
+	[-s=<s> (manually fixes the spacer length s between branchings)]
+	[-seed=<seed integer>]
+	[-citeas] [-version] [-v] (how to cite gensaw)
+
+
+note: all lengths have to be specified using the same user-chosen units. The resulting configurations are using the same unit. 
+
+Monomer diameter
+
+  -d=<monomer diameter>
+   Diameter of the assumed spherical monomer. The default is d=b.
+   To create a single chain, or an ensemble of chains without excluded volume choose -d=0
+
+Box size
+
+  -box=<value> specifies box size in all dimensions (xhi=box/2, xlo=-box/2 etc). 
+  -xlo=<value> specifies the lower box bound on the x-axis. This value is ignored if -tight is chosen. 
+  -xhi=<value> specifies the upper box bound on the x-axis. This value is ignored if -tight is chosen.
+  -ylo=<value> for the y-axis. If -ylo remains unspecified, ylo=xlo is used. Same for yhi, zlo, zhi.
+  -tight       box sizes are chosen automatically depending on the anchoring and confinement options.
+  -large       box sizes are chosen automatically depending on the anchoring and confinement options.
+
+  -px	       makes the box periodic in x-direction 
+  -py          makes the box periodic in y-direction
+  -pz          makes the box periodic in z-direction
+  -p           makes the box periodic in all directions
+ 
+   Note: if the box is non-periodic, chains are enforced to stay within box bounds. 
+
+Anchoring options:
+
+  -anchor0
+   This is the default in the absence of any -anchor* command. All chains emanate from the origin, first bond aligned in z-direction
+   and 2nd bond residing in the x-z-plane.
+
+  -anchorPLANE=<area-per-chain>
+   All chains start in the x-y-plane at z=0, at random positions within a square area determined by the provided area per chain. 
+   First bond aligned in z-direction, 2nd bond randomly oriented. 
+
+  -anchorOCYL<cylinder-radius,cylinder-height>
+   All chains start somewhere randomly on the outer surface of an open cylinder of cylinder-radius and cylinder-height. Cylinder oriented in z-direction
+   and centered at the origin. First segment oriented in the direction of the surface normal. 
+    
+  -anchorICYL=<cylinder-radius,cylinder-height>
+   All chains start somewhere randomly on the inner surface of an open cylinder of cylinder-radius and cylinder-height. Cylinder oriented in z-direction.
+   First segment oriented in the direction of the surface normal.
+
+  -anchorOSPH=<sphere-radius>
+   All chains start somewhere randomly on the outer surface of a sphere of sphere-radius. Sphere centered at the origin. 
+   First segment oriented in the direction of the surface normal.
+
+  -anchorISPH=<sphere-radius>
+   All chains start somewhere randomly on the inner surface of a sphere of sphere-radius. Sphere centered at the origin.
+   First segment oriented in the direction of the surface normal.
+
+  -anchorOCONE=<small-radius,large-radius,cone-height>
+   All chains start at the outer surface of a (partial) open cone, parameterized by small and large cone radii, and the 
+   height of the (partial) cone. For a full cone, choose small-radius=0. Cone tip located at the origin. 
+   First segment oriented in the direction of the surface normal.
+
+  -anchorICONE=<small-radius,large-radius,cone-height>
+   All chains start at the inner surface of a (partial) open cone, parameterized by small and large cone radii, and the
+   height of the (partial) cone. For a full cone, choose small-radius=0. Cone tip located at the origin.
+   First segment oriented in the direction of the surface normal.
+
+  -anchorRANDOM=<monomer-number-density>
+   All chains start somewhere inside a box whose volume is determined by the monomer number density.
+
+  -anchor=<filename>
+   Anchoring conditions for all chains specified in file filename. For each chain, this file contains 
+   one line. Each line has six columns, x y z ux uy uz speciying the anchoring point and the orientation 
+   of the first bond.
+
+Confinement options:
+
+  -confinementNONE
+   This is the default in the absence of any -confinemend* option.
+
+  -confinementAUTO
+   Choose a confinement in accord with the chosen anchoring condition.
+
+  -confinementPLANE=<z-value>
+   Enforce chains to stay at z>z-value
+
+  -confinementOCYL=<cylinder-radius, cylinder-height>
+   Enforce chains to stay outside a cylinder of cylinder-radius and cylinder-height. Cylinder oriented 
+   in z-direction and centered at the origin. 
+
+  -confinementICYL=<cylinder-radius, cylinder-height>
+   Enforce chains to stay inside a cylinder of cylinder-radius and cylinder-height. Cylinder oriented
+   in z-direction and centered at the origin.
+
+  -confinementOSPH=<sphere-radius>
+   Enforce chains to stay outside a sphere of sphere-radius. Sphere centered at the origin.
+
+  -confinementISPH=<sphere-radius>
+   Enforce chains to stay inside a sphere of sphere-radius. Sphere centered at the origin.
+
+  -confinementOCONE=<small-radius, large-radius, cone-height>
+   Enforce chains to stay outside the cone with small-radius and large-radius and cone-height.
+
+  -confinementICONE=<small-radius, large-radius, cone-height>
+   Enforce chains to stay inside the open cone with small-radius and large-radius and cone-height.
+
+  -confinement=<filename>
+   Enforce chains to stay outside the region defined in filename. For examples, see manuscript.
+
+Bending energy:
+
+  -bendRANDOM
+   This is the default. Zero bending energy. This is equivalent with -bendFUNC=0
+
+  -bend=<angle in DEG>
+   Fixed bending angle in [0,180) (as for a freely rotating chain). 
+
+  -bendWLC=<kbend>
+   Bending energy of a wormlike chain, parameterized by dimensionless stiffness kbend
+
+  -bendFUNC="function in terms of theta"
+   Bending energy divided by kBT specified by a function in terms of theta in [0,pi]. 
+   Basic fortran syntax must be used. 
+
+  -bendTABLE=<filename>
+   Bending energy divided by kBT specified by a table with two columns. Each row contains
+   two values: bending angle in radiants, and dimensionless bending energy. If the table contains less
+   than 10 rows, the angles are interpreted at fixed bending angles with their corresponding energies. 
+  
+Torsion/dihedral energy:
+
+  -torsRANDOM
+   This is the default. Zero torsion energy. This is equivalent with -torsFUNC=0
+
+  -torsTGG=<p>
+   trans-gauche chains, equal gauche probability, trans probability is given by p, gauche+/- probability is (1-p)/2
+  
+  -torsFUNC="function in terms of phi"
+   Dihedral energy divided by kBT is given by the analytic expression in terms of dihedral angle phi in [-pi,pi].
+  
+  -torsTABLE=<filename>
+   Dihedral energy divided by kBT as function of phi provided by the table stored in filename. 
+   Each row contains two values: dihedral angle in radiants, and dimensionless torsion energy. If the table contains less
+   than 10 rows, the angles are interpreted at fixed torsion angles with their corresponding energies.
+  
+_______________________________
+
+EXAMPLES; 
+_______________________________
+
+perl ./gensaw -C=10 -N=100 -b=1 -tight -output=d3D
+perl ./gensaw -C=10 -N=100 -b=1 -tight -output=dump
+perl ./gensaw -C=10 -N=100 -b=1 -p -torsTGG=0.4 -output=dump
+perl ./gensaw -C=10 -N=100 -b=1 -bend=68 -torsTGG=0.2 -output=dump
+perl ./gensaw -C=10 -N=100 -b=1 -bend=10 -output=dump
+perl ./gensaw -C=200 -N=100 -b=1 -bend=10 -output=dump -confinementICONE=5,10,100 -tight
+perl ./gensaw -C=100 -N=100 -b=1 -bend=10 -output=dump -confinementISPH=50 -tight 
+perl ./gensaw -C=200 -N=100 -b=1 -bend=10 -output=dump -anchorPLANE=10 -confinementAUTO -tight
+
+perl ./gensaw -C=10 -N=100 -b=1 -bend=68 -torsTGG=0.2 -output=Z1
+perl ./gensaw -C=10 -N=100 -b=1 -bend=68 -torsTGG=0.3 -anchorICYL=5.0,10.0 -output=xyz
+perl ./gensaw -C=10 -N=100 -b=1 -d=0.5 -torsTGG=0.4 -anchorPLANE=5.0 -confinementAUTO
+perl ./gensaw -C=10 -N=100 -b=1 -bend=120 -energymode=tgg,0.2 -anchorICONE=5,10,20 -confinementAUTO -output=dump
+perl ./gensaw -C=10 -N=100 -b=1 -d=1 -px -py -bendWLC=4 -anchorCYLO=5,20 -output=dump
+
+perl ./gensaw -N=156 -C=1000 -tight -b=0.154 -d=0.3 -123 -bendFUNC="128.89*(theta-1.187)**2" -torsFUNC="1.119*(2.217-2.905*cos(phi)-3.135*cos(phi)**2+0.731*cos(phi)**3+6.271*cos(phi)**4+7.527*cos(phi)**5)"
+________________________________
+Hint: how to cite gensaw? call: gensaw -v
+Hint: to see a single page of stdout at a time call: gensaw -help|more 
+EOF
+};
+
+sub ERROR { NOTES; print color("yellow"); print<<EOF;
+\n--------------------------- ERROR ----------------------\n @_\n--------------------------------------------------------
+EOF
+print color("reset");
+exit;
+};
+
+# --------------------------------------- HELPER ROUTINES -----------------------------
+sub acos { atan2( sqrt(1 - $_[0] * $_[0]), $_[0] ) };
+sub asin { atan2($_[0],sqrt(1-$_[0]**2)) };
+sub get_theta { $myrand   = int(rand()*$resolution); acos($proper_weighted_ctheta[$myrand]); };
+sub create_randomunit { $z2=2; while ($z2 ge 1) { $z2=0; $z[1]=1-2*rand(); $z[2]=1-2*rand(); $z2=$z[1]**2+$z[2]**2; }; $u[1]=2*$z[1]*sqrt(1-$z2); $u[2]=2*$z[2]*sqrt(1-$z2); $u[3]=1-2*$z2; };
+sub TOOBOX { ERROR("[$_[0]]=[$_[1]] too small (or unset) to carry the anchors (consider adding -tight or -large or -box or -xlo etc.)\n"); };
+# --------------------------------------- HELPER ROUTINES -----------------------------
+
+sub CLEANUP {
+ $tmp[$#tmp+1]="_perl_arguments";
+ $tmp[$#tmp+1]="_suggested_praefix";
+ $tmp[$#tmp+1]="config.dump";
+ $tmp[$#tmp+1]="config.xyz"; 
+ $tmp[$#tmp+1]="config.Z1"; 
+ $tmp[$#tmp+1]="config.mol2";
+ $tmp[$#tmp+1]="config.data"; 
+ $tmp[$#tmp+1]="config.gro"; 
+ $tmp[$#tmp+1]="config.pdb";
+ $tmp[$#tmp+1]="config.d3D";
+ $tmp[$#tmp+1]="_musecs_per_atom";
+ $tmp[$#tmp+1]="$code.ex";
+ $tmp[$#tmp+1]="$code.f90"; 
+ $tmp[$#tmp+1]="_error_compiler";
+ $tmp[$#tmp+1]="inc.box";
+ $tmp[$#tmp+1]="inc.strategy";
+ $tmp[$#tmp+1]="inc.N";
+ $tmp[$#tmp+1]="inc.skip";
+ $tmp[$#tmp+1]="inc.outputformat";
+ $tmp[$#tmp+1]="inc.periodic";
+ $tmp[$#tmp+1]="inc.resolution";
+ $tmp[$#tmp+1]="_N_chains";
+ $tmp[$#tmp+1]="_ee";
+ $tmp[$#tmp+1]="_created";
+ $tmp[$#tmp+1]="_periodic_d";
+ $tmp[$#tmp+1]="inc.outside";
+ $tmp[$#tmp+1]="inc.parameter";
+ $tmp[$#tmp+1]="inc.anchors";
+ $tmp[$#tmp+1]="inc.cumprob_phi";
+ $tmp[$#tmp+1]="inc.cumprob_phi_compact";
+ $tmp[$#tmp+1]="inc.phi_weight";
+ $tmp[$#tmp+1]="inc.cumprob_ctheta";
+ $tmp[$#tmp+1]="inc.cumprob_ctheta_compact";
+ $tmp[$#tmp+1]="inc.ctheta_weight";
+ $tmp[$#tmp+1]="inc.format";
+ $tmp[$#tmp+1]="config.ee"; 
+ $tmp[$#tmp+1]="_R2"; 
+ $tmp[$#tmp+1]=".tmp_mol2_atom"; 
+ $tmp[$#tmp+1]=".tmp_mol2_bond"; 
+ $tmp[$#tmp+1]="config.dxy";
+ $tmp[$#tmp+1]="config.dxz";
+ $tmp[$#tmp+1]="config.dyz";
+ $tmp[$#tmp+1]="config.drx";
+ $tmp[$#tmp+1]="config.dry";
+ $tmp[$#tmp+1]="config.drz";
+ $tmp[$#tmp+1]="_animate_xyz_parameters";
+ $tmp[$#tmp+1]="inc.overlap-used";
+ $tmp[$#tmp+1]="_used_f_s";
+ $tmp[$#tmp+1]=".gensaw-script";
+ foreach $i (0 .. $#tmp) { `rm -rf $tmp[$i]`; }; print "cleaned.\n"; 
+ if (-s ".seed") { `chmod 777 .seed`; }; if (-s ".oldseed") { `chmod 777 .oldseed`; }; 
+ exit; 
+};
+
+sub HANDLE_BEND_MODES { 
+ # ----------------------------------------- 		# map to bendTABLE
+ if ($bendmode eq "bend") { 		# sub thetamode_1 {
+  $theta_fixed = $bendvar1/180*$pi;
+  if ($bendvar1>=180)    { ERROR("fixed bending angle in [0,180). A rodlike chain has zero bending angle."); }; 
+  if ($bendvar1<0)       { ERROR("fixed bending angle in [0,180). A rodlike chain has zero bending angle."); }; 
+  $tmpalpha = asin($d/(2*$b)); if ($theta_fixed >= $pi-2*$tmpalpha) { ERROR("fixed bending angle too large for chosen bond length and diameter (rodlike chains have zero bending angle)"); };
+  $table_ctheta[$#table_ctheta+1] = cos($theta_fixed); $table_ctheta_weight[$#table_ctheta] = 1; 
+  open(TABLE,">inc.ctheta_weight"); foreach $i (0 .. $#table_ctheta) { print TABLE "$table_ctheta[$i] $table_ctheta_weight[$i]\n"; }; close(TABLE);
+ }; 
+ # -----------------------------------------
+ if ($bendmode eq "bendRANDOM") { 			# map to bendFUNC
+  $bendmode="bendFUNC"; 
+  $bendvar1="0.0*theta"; 		
+ }; 
+ # -----------------------------------------
+ if ($bendmode eq "bendWLC")    {			# map to bendFUNC
+  $bendmode="bendFUNC"; 
+  $bendvar1="$bendvar1*(1-costheta)";
+ }; 
+ # -----------------------------------------		# this is bendFUNC
+ if ($bendmode eq "bendFUNC") {
+  $betaEctheta =  $bendvar1; 
+  if ($bendvar1=~/theta/) { } else { ERROR("bendFUNC: function must contain variable theta"); }; 
+  $betaEctheta =~ s/\^/**/g; 
+  $betaEctheta =~ s/costheta/\$CTHETA/g;
+  $betaEctheta =~ s/theta/acos(\$CTHETA)/g;  		
+  open(SCRIPT,">.gensaw-script"); print SCRIPT<<EOF;
+  use Math::Trig;
+  open(TABLE,\">inc.ctheta_weight\");
+  foreach \$ictheta (0 .. $resolution-1) {
+   \$CTHETA = 1-2*\$ictheta/$resolution;
+   # \$theta = $pi-\$itheta*($pi/$resolution);
+   # \$weight = exp(-($betaEtheta));
+   \$weight = exp(-($betaEctheta));
+   print TABLE \"\$CTHETA \$weight\\n\";
+  };
+  close(TABLE);
+EOF
+  system($^X,"./.gensaw-script");
+ };
+ # -----------------------------------------
+ if ($bendmode eq "bendTABLE") {			# this is bendTABLE
+  die 'bendTABLE to be implemented'; 
+ }; 
+ # -----------------------------------------
+}; # end HANDLE_BEND_MODES
+
+
+sub HANDLE_TORS_MODES {
+ # -----------------------------------------
+ if ($torsmode eq "torsRANDOM") { 
+  $torsmode="torsFUNC"; $torsvar1="0.0*phi";		# map to torsFUNC
+ }; 
+ # -----------------------------------------
+ if ($torsmode eq "torsTGG") {
+  if (!$torsvar1) { ERROR("missing trans-gauche parameter for $torsmode"); };	# map to torsTABLE
+  $ptrans = $torsvar1; 
+  if ($ptrans < 0) { ERROR("torsTGG probability out of bounds"); }; 
+  if ($ptrans > 1) { ERROR("torsTGG probability out of bounds"); };
+  $table_phi[$#table_phi+1]  = $pi;      $table_weight[$#table_phi] = $ptrans+0;
+  $table_phi[$#table_phi+1]  = $pi/3;    $table_weight[$#table_phi] = (1-$ptrans)/2;
+  $table_phi[$#table_phi+1]  =-$pi/3;    $table_weight[$#table_phi] = (1-$ptrans)/2;
+  open(TABLE,">inc.phi_weight"); foreach $i (0 .. $#table_phi) { print TABLE "$table_phi[$i] $table_weight[$i]\n"; }; close(TABLE); 
+ };
+ # -----------------------------------------
+ if ($torsmode eq "torsFUNC") {
+  if (!$torsvar1) { ERROR("missing function expression for $torsmode"); };
+  $betaE1 =  $torsvar1; 
+  if ($torsvar1=~/phi/) { } else { ERROR("torsFUNC: function must contain variable phi"); }; 
+  $betaE1 =~ s/\^/**/g;
+  $betaE1 =~ s/phi/\$phi/g; chomp $betaE1;
+  open(SCRIPT,">.gensaw-script"); print SCRIPT<<EOF;
+  use Math::Trig;
+  open(TABLE,\">inc.phi_weight\");
+  foreach \$iphi (0 .. $resolution-1) {
+   \$phi    = $pi-\$iphi*(2*$pi/$resolution); \$weight = exp(-($betaE1)); print TABLE \"\$phi \$weight\\n\";
+  };
+  close(TABLE);
+EOF
+  system($^X,"./.gensaw-script");
+ };
+ # -----------------------------------------
+ if ($torsmode eq "torsTABLE") {
+  if (!$torsvar1) { ERROR("missing file name for $torsmode"); }; 
+  if (-s "$torsvar1") { } else { ERROR("missing table file $torsvar1\n"); }; 
+  open(DATA,"<$torsvar1"); @DATA=<DATA>; close(DATA);
+  open(TABLE,">inc.phi_weight");
+  foreach $i (0 .. $#DATA) { foreach $k (0 .. 10) { $DATA[$i]=~s/  / /g; }; $DATA[$i]=~s/^ //;
+   if ($DATA[$i]=~/,/) { $SEP=","; } else { $SEP=" "; };
+   ($phi,$betaE1)=split(/$SEP/,$DATA[$i]);
+   print TABLE "$phi ",exp(-$betaE1),"\n";
+  };
+  close(TABLE);
+ };
+ # -----------------------------------------
+}; # end HANDLE_TORS_MODES
+
+
+sub HANDLE_ANCHOR_MODES { 
+ # -----------------------------------------
+ if ($anchormode eq "anchor0") {
+  $auto_confinement = "confinementNONE";
+  if ($tight)  { $xhi=$N*$b; $xlo=-$xhi; $yhi=$N*$b; $ylo=-$yhi; $zhi=$N*$b; $zlo=-$zhi; }; 
+  if ($large)  { $xhi=$N*$b; $xlo=-$xhi; $yhi=$N*$b; $ylo=-$yhi; $zhi=$N*$b; $zlo=-$zhi; };
+  open(TABLE,">inc.anchors"); foreach $i (1 .. $chains) {
+  $u1x = 0; $u1y = 0; $u1z = 1;
+  print TABLE "0 0 0 $u1x $u1y $u1z\n"; }; close(TABLE);
+ }; 
+ # -----------------------------------------
+ if ($anchormode eq "anchorPLANE") {
+  $auto_confinement = "confinementPLANE=$zlo";
+  if (!$anchorvar1) { ERROR("missing area-per-chain parameter for $anchormode\n"); }; 
+  $area_per_chain = $anchorvar1; if ($area_per_chain lt $vars{d}**2) { ERROR("area per chain in -anchorPLANE=.. is too small\n"); exit; }; 
+  #$surf_density   = $anchorvar1; if ($surf_density+0 eq 0) { ERROR("surface density in -anchorPLANE=.. must be positive\n"); exit; }; 
+  $surface_area   = $chains*$area_per_chain;
+  $surface_length = sqrt($surface_area); 
+  if ($tight)  { $xhi=$surface_length/2; $xlo=-$xhi; $ylo=$xlo; $yhi=$xhi; $zlo="0.0"; $zhi=$N*$b; }; 
+  if ($large)  { $xhi=$surface_length/2+$N*$b; $xlo=-$xhi; $ylo=$xlo; $yhi=$xhi; $zlo="0.0"; $zhi=$N*$b; };
+  $sxhi = $surface_length/2; $sxlo = -$sxhi; $sylo=$sxlo; $syhi=$sxhi; 
+  if ($xlo>$sxlo) { TOOBOX("xlo",$xlo); }; 
+  if ($ylo>$sylo) { TOOBOX("ylo",$ylo); };
+  if ($xhi<$sxhi) { TOOBOX("xhi",$xhi); };
+  if ($yhi<$syhi) { TOOBOX("yhi",$yhi); };
+  if ($zlo>0)     { TOOBOX("zlo",$zlo); };
+  open(TABLE,">inc.anchors");
+  foreach $i (1 .. $chains) {
+   $x=$sxlo+rand()*($sxhi-$sxlo); $y=$sylo+rand()*($syhi-$sylo); $z=$zlo;
+   $u1x = 0; $u1y = 0; $u1z = 1;
+   print TABLE "$x $y $z $u1x $u1y $u1z\n";
+  };
+  close(TABLE);
+ };
+ # -----------------------------------------
+ if ($anchormode eq "anchorRANDOM") {
+  $auto_confinement = "confinementNONE";
+  if (!$anchorvar1) { ERROR("missing parameter for $anchormode\n"); };
+  $bulk_density = $anchorvar1;
+  $bulk_volume  = $chains*($N+1)/$bulk_density; 
+  $bulk_length  = $bulk_volume**(1/3);
+  $xhi=$bulk_length/2; $xlo=-$xhi; $ylo=$xlo; $yhi=$xhi; $zlo=$xlo; $zhi=$xhi; $NOTE.="note: xlo=$xlo and xhi=$xhi used to place anchors\n"; 
+  open(TABLE,">inc.anchors");
+  foreach $i (1 .. $chains) {
+   $x=$xlo+(1-$periodx)*$b+rand()*($xhi-$xlo-2*(1-$periodx)*$b); 
+   $y=$ylo+(1-$periody)*$b+rand()*($yhi-$ylo-2*(1-$periody)*$b); 
+   $z=$zlo+(1-$periodz)*$b+rand()*($zhi-$zlo-2*(1-$periodz)*$b); 
+   create_randomunit; $u1x = $u[1]; $u1y = $u[2]; $u1z = $u[3];
+   print TABLE "$x $y $z $u1x $u1y $u1z\n";
+  };
+  close(TABLE); 
+  if ($tight)  { $xhi=$bulk_length/2; $xlo=-$xhi; $ylo=$xlo; $yhi=$xhi; $zlo=$xlo; $zhi=$xhi; };
+  if ($large)  { $xhi=$bulk_length/2+$N*$b; $xlo=-$xhi; $ylo=$xlo; $yhi=$xhi; $zlo=$xlo; $zhi=$xhi; };
+  if ($box)    { $xhi=$box/2; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$xhi; $zlo=$xlo; };
+  if ($xhi-$xlo<$bulk_length) { TOOBOX("xhi",$xhi); };
+  if ($yhi-$ylo<$bulk_length) { TOOBOX("yhi",$yhi); };
+  if ($zhi-$zlo<$bulk_length) { TOOBOX("zhi",$zhi); };
+ };
+ # -----------------------------------------
+ if ($anchormode eq "anchorICYL") {
+  $auto_confinement = "confinementICYL=$anchorvar1,$anchorvar2";
+  if (!$anchorvar1) { ERROR("missing 1st parameter for $anchormode\n"); };
+  if (!$anchorvar2) { ERROR("missing 2nd parameter for $anchormode\n"); };
+  $cyl_radius = $anchorvar1;
+  $cyl_height = $anchorvar2; 
+  if ($tight)  { $xhi=$cyl_radius+$d; $xlo=-$xhi; $yhi=$cyl_radius+$d; $ylo=-$yhi; $zlo=-$d; $zhi=$cyl_height+$d; }; 
+  if ($large)  { $xhi=$cyl_radius+$N*$b; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zlo=-$N*$b; $zhi=$cyl_height+$N*$b; };  
+  if ($xhi<$cyl_radius)  { TOOBOX("xhi",$xhi); };
+  if ($yhi<$cyl_radius)  { TOOBOX("yhi",$yhi); };
+  if ($xlo>-$cyl_radius) { TOOBOX("xlo",$xlo); };
+  if ($ylo>-$cyl_radius) { TOOBOX("ylo",$ylo); };
+  if ($zlo>0) { TOOBOX("zlo",$zlo); };
+  if ($zhi<$cyl_height) { TOOBOX("zhi",$zhi); };
+  open(TABLE,">inc.anchors");
+  foreach $i (1 .. $chains) {
+   $myangle = 2*$pi*rand(); 
+   $x=cos($myangle)*$cyl_radius; $y=sin($myangle)*$cyl_radius; $z=rand()*$cyl_height;	
+   $r=sqrt($x**2+$y**2); 			
+   $u1x = -$x/$r; $u1y = -$y/$r; $u1z = 0;
+   print TABLE "$x $y $z $u1x $u1y $u1z\n";
+  };
+  close(TABLE);
+ };
+ # -----------------------------------------
+ if ($anchormode eq "anchorOCYL") {
+  $auto_confinement = "confinementOCYL=$anchorvar1,$anchorvar2";		
+  if (!$anchorvar1) { ERROR("missing 1st parameter for $anchormode\n"); };
+  if (!$anchorvar2) { ERROR("missing 2nd parameter for $anchormode\n"); };
+  $cyl_radius = $anchorvar1;
+  $cyl_height = $anchorvar2;
+  if ($tight)  { $xhi=$cyl_radius+$N*$b; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$cyl_radius+$N*$d; $zlo=-$d; };
+  if ($large)  { $xhi=$cyl_radius+$N*$b; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zlo=-$N*$b; $zhi=$cyl_height+$N*$b; };
+  if ($xhi<$cyl_radius)  { TOOBOX("xhi",$xhi); };
+  if ($yhi<$cyl_radius)  { TOOBOX("yhi",$yhi); };
+  if ($xlo>-$cyl_radius) { TOOBOX("xlo",$xlo); };
+  if ($ylo>-$cyl_radius) { TOOBOX("ylo",$ylo); };
+  if ($zlo>0) { TOOBOX("zlo",$zlo); };
+  if ($zhi<$cyl_height) { TOOBOX("zhi",$zhi); };
+  open(TABLE,">inc.anchors");
+  foreach $i (1 .. $chains) {
+   $myangle = 2*$pi*rand();
+   $x=cos($myangle)*$cyl_radius; $y=sin($myangle)*$cyl_radius; $z=rand()*$cyl_height;
+   $r=sqrt($x**2+$y**2);			
+   $u1x = $x/$r; $u1y = $y/$r; $u1z = 0;
+   print TABLE "$x $y $z $u1x $u1y $u1z\n";
+  };
+  close(TABLE);
+ };
+ # -----------------------------------------
+ if ($anchormode eq "anchorICONE") {
+  $auto_confinement = "confinementICONE=$anchorvar1,$anchorvar2,$anchorvar3";
+  if (!$anchorvar3) { ERROR("missing three parameters for $anchormode\n"); };
+  $conesmall  = $anchorvar1;
+  $conelarge  = $anchorvar2;
+  $coneheight = $anchorvar3;
+  if ($tight)  { $xhi=$conelarge+$d; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$coneheight+$d; $zlo=0-$d; }; 
+  if ($large)  { $xhi=$conelarge+$N*$d; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$coneheight+$N*$d; $zlo=-$N*$d; }; 
+  if ($conelarge<$conesmall) { ERROR("cone small-r > large-r"); }; 
+  # no further checking here ..  
+  open(TABLE,">inc.anchors");
+  $gamma = ($conelarge-$conesmall)/$coneheight;
+  foreach $i (1 .. $chains) {
+   $randz = rand()*$coneheight;
+   $randphi = 2*$pi*rand();
+   $x = ($conesmall+$gamma*$randz)*cos($randphi);
+   $y = ($conesmall+$gamma*$randz)*sin($randphi);
+   $z = $randz;
+   $u1x = -1/sqrt(1+$gamma**2)*cos($randphi);
+   $u1y = -1/sqrt(1+$gamma**2)*sin($randphi);
+   $u1z = $gamma/sqrt(1+$gamma**2);
+   print TABLE "$x $y $z $u1x $u1y $u1z\n";
+  };
+  close(TABLE);
+ };
+ # -----------------------------------------
+ if ($anchormode eq "anchorOCONE") {
+  $auto_confinement = "confinementOCONE=$anchorvar1,$anchorvar2,$anchorvar3";
+  if (!$anchorvar3) { ERROR("missing three parameters for $anchormode\n"); };
+  $conesmall  = $anchorvar1;
+  $conelarge  = $anchorvar2;
+  $coneheight = $anchorvar3;
+  if ($tight)  { $xhi=$conelarge+$N*$d; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$coneheight+$N*$d; $zlo=-$N*$d; };
+  if ($large)  { $xhi=$conelarge+$N*$d; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$coneheight+$N*$d; $zlo=-$N*$d; };
+  if ($conelarge<$conesmall) { ERROR("cone small-r > large-r"); };
+  # no further checking here ..
+  open(TABLE,">inc.anchors");
+  $gamma = ($conelarge-$conesmall)/$coneheight;
+  foreach $i (1 .. $chains) {
+   $randz = rand()*$coneheight;
+   $randphi = 2*$pi*rand();
+   $x = ($conesmall+$gamma*$randz)*cos($randphi);
+   $y = ($conesmall+$gamma*$randz)*sin($randphi);
+   $z = $randz;
+   $u1x = 1/sqrt(1+$gamma**2)*cos($randphi);
+   $u1y = 1/sqrt(1+$gamma**2)*sin($randphi);
+   $u1z = -$gamma/sqrt(1+$gamma**2);
+   print TABLE "$x $y $z $u1x $u1y $u1z\n";
+  };
+  close(TABLE);
+ };
+ # -----------------------------------------
+ if ($anchormode eq "anchorISPH") {
+  $auto_confinement = "confinementISPH=$anchorvar1";
+  if (!$anchorvar1) { ERROR("missing parameter for $anchormode\n"); };
+  $sph_radius = $anchorvar1; 
+  if ($tight)  { $xhi=$sph_radius; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$xhi; $zlo=$xlo; }; 
+  if ($large)  { $xhi=$sph_radius; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$xhi; $zlo=$xlo; }; 
+  if ($xhi<$sph_radius)  { TOOBOX("xhi",$xhi); };
+  if ($yhi<$sph_radius)  { TOOBOX("yhi",$yhi); };
+  if ($zhi<$sph_radius)  { TOOBOX("zhi",$zhi); };
+  if ($xlo>-$sph_radius) { TOOBOX("xlo",$xlo); };
+  if ($ylo>-$sph_radius) { TOOBOX("ylo",$ylo); };
+  if ($zlo>-$sph_radius) { TOOBOX("zlo",$zlo); };
+  if ($sph_radius < 2*$b) { ERROR("sphere radius < 2*bond length"); }; 
+  if ($sph_radius < $d/2) { ERROR("sphere diameter < bead diameter"); }; 
+  open(TABLE,">inc.anchors");
+  foreach $i (1 .. $chains) {
+   create_randomunit; 
+   $x = $u[1]*$sph_radius; 
+   $y = $u[2]*$sph_radius;
+   $z = $u[3]*$sph_radius;
+   $r=sqrt($x**2+$y**2+$z**2);
+   $u1x = -$x/$r; $u1y=-$y/$r; $u1z=-$z/$r; 
+   print TABLE "$x $y $z $u1x $u1y $u1z\n";
+  };  
+ };
+ # -----------------------------------------
+ if ($anchormode eq "anchorOSPH") {
+  $auto_confinement = "confinementOSPH=$anchorvar1";
+  if (!$anchorvar1) { ERROR("missing parameter for $anchormode\n"); };
+  $sph_radius = $anchorvar1;
+  if ($tight)  { $xhi=$sph_radius+$N*$b; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$xhi; $zlo=$xlo; };
+  if ($large)  { $xhi=$sph_radius+$N*$b; $xlo=-$xhi; $yhi=$xhi; $ylo=$xlo; $zhi=$xhi; $zlo=$xlo; };
+  if ($xhi<$sph_radius+2*$d)  { TOOBOX("xhi",$xhi); };
+  if ($yhi<$sph_radius+2*$d)  { TOOBOX("yhi",$yhi); };
+  if ($zhi<$sph_radius+2*$d)  { TOOBOX("zhi",$zhi); };
+  if ($xlo>-$sph_radius-2*$d) { TOOBOX("xlo",$xlo); };
+  if ($ylo>-$sph_radius-2*$d) { TOOBOX("ylo",$ylo); };
+  if ($zlo>-$sph_radius-2*$d) { TOOBOX("zlo",$zlo); };
+  open(TABLE,">inc.anchors");
+  foreach $i (1 .. $chains) {
+   create_randomunit;
+   $x = $u[1]*$sph_radius;
+   $y = $u[2]*$sph_radius;
+   $z = $u[3]*$sph_radius;
+   $r=sqrt($x**2+$y**2+$z**2);
+   $u1x = $x/$r; $u1y=$y/$r; $u1z=$z/$r;
+   print TABLE "$x $y $z $u1x $u1y $u1z\n";
+  };
+ };
+ # -----------------------------------------
+ if ($anchormode eq "anchor") {
+  $auto_confinement = "confinementNONE";
+  if (!$anchorvar1) { ERROR("missing file name for $anchormode\n"); };
+  if (-s "$anchorvar1") { } else { ERROR("missing anchor filename $anchorvar1\n"); }; 
+  `cp $anchorvar1 inc.anchors`; 
+  $lines_in_file=`grep -c . inc.anchors`; chomp $lines_in_file; if ($lines_in_file<$chains) { $NOTE.="note: $lines_in_file lines in $anchorvar1 are re-used for $chains chains\n"; }; 
+ }; 
+}; # end HANDLE_ANCHOR_MODES 
+
+sub HANDLE_CONFIN_MODES { 
+ open(CONFINEMENT,">inc.outside"); print CONFINEMENT "outside=.false.\n"; 
+ # -----------------------------------------
+ if ($confinmode eq "confinementAUTO") {
+  if ($auto_confinement) { 
+   ($confinmode,$value)=split(/=/,$auto_confinement); if ($value eq 0) { $value="0.0"; }; ($confinvar1,$confinvar2,$confinvar3)=split(/,/,$value); 
+  }; 
+ };
+ # -----------------------------------------
+ if ($confinmode eq "confinementNONE") {
+ }; 
+ # -----------------------------------------
+ if ($confinmode eq "confinementPLANE") {
+  if (!$confinvar1) { ERROR("missing parameter for $confinmode\n"); }; 
+  print CONFINEMENT<<EOF;
+if (z.lt.$confinvar1) outside=.true.
+EOF
+ };
+ # -----------------------------------------
+ if ($confinmode eq "confinementOCYL") {
+  if (!$confinvar2) { ERROR("missing parameter for $confinmode\n"); };
+  $cyl_radius = $confinvar1;
+  $cyl_height = $confinvar2;
+  print CONFINEMENT<<EOF;
+if (z.gt.0.and.z.lt.$cyl_height.and.sqrt(x**2+y**2).lt.$cyl_radius) outside=.true.
+EOF
+ };
+ # -----------------------------------------
+ if ($confinmode eq "confinementICYL") {
+  if (!$confinvar2) { ERROR("missing parameter for $confinmode\n"); };
+  $cyl_radius = $confinvar1;
+  $cyl_height = $confinvar2;
+  print CONFINEMENT<<EOF;
+if (z.gt.0.and.z.lt.$cyl_height.and.sqrt(x**2+y**2).gt.$cyl_radius) outside=.true.
+EOF
+ };
+ # -----------------------------------------
+ if ($confinmode eq "confinementOSPH") {
+  if (!$confinvar1) { ERROR("missing parameter for $confinmode\n"); };
+  $sph_radius = $confinvar1;
+  print CONFINEMENT<<EOF;
+if (sqrt(x**2+y**2+z**2).lt.$sph_radius) outside=.true.
+EOF
+ };
+ # -----------------------------------------
+ if ($confinmode eq "confinementISPH") {
+  if (!$confinvar1) { ERROR("missing parameter for $confinmode\n"); };
+  $sph_radius = $confinvar1;
+  print CONFINEMENT<<EOF;
+if (sqrt(x**2+y**2+z**2).gt.$sph_radius) outside=.true.
+EOF
+ };
+ # -----------------------------------------
+ if ($confinmode eq "confinementOCONE") {
+  if (!$confinvar3) { ERROR("missing parameter for $confinmode\n"); };
+  $conesmall  = $confinvar1;
+  $conelarge  = $confinvar2;
+  $coneheight = $confinvar3;
+  $gamma = ($conelarge-$conesmall)/$coneheight;
+  print CONFINEMENT<<EOF;
+! info: conesmall = $conesmall, conelarge=$conelarge, coneheight=$coneheight, gamma=$gamma
+if (z.gt.0.and.z.lt.$coneheight.and.x**2+y**2.lt.($conesmall+$gamma*z)**2) outside=.true.
+EOF
+ };
+ # -----------------------------------------
+ if ($confinmode eq "confinementICONE") {
+  if (!$confinvar3) { ERROR("missing parameter for $confinmode\n"); };
+  $conesmall  = $confinvar1;
+  $conelarge  = $confinvar2;
+  $coneheight = $confinvar3;
+  $gamma = ($conelarge-$conesmall)/$coneheight;
+  print CONFINEMENT<<EOF;
+! info: conesmall = $conesmall, conelarge=$conelarge, coneheight=$coneheight, gamma=$gamma
+if (z.gt.0.and.z.lt.$coneheight.and.x**2+y**2.gt.($conesmall+$gamma*z)**2) outside=.true.
+EOF
+ };
+ # -----------------------------------------
+ if ($confinmode eq "confinement") {
+  if (!$confinvar1) { ERROR("missing parameter for $confinmode\n"); };
+  if (-s "$confinvar1") { $NOTE.="note: using $confinvar1\n"; } else { ERROR("missing file $confinvar1\n"); }; 
+  close(CONFINEMENT); `cat $confinvar1 >> inc.outside`; 
+ };
+ close(CONFINEMENT);
+}; 
+
+sub create_cum_probability_table_ctheta {
+ open(DATA,"<inc.ctheta_weight"); @DATA=<DATA>; close(DATA); @ctheta=(); 
+ $sumweight=0; foreach $i (0 .. $#DATA) { chomp $DATA[$i]; ($ctheta[$i],$weight[$i])=split(/ /,$DATA[$i]); $sumweight+=$weight[$i]; }; 
+ $cumprob_ctheta[0]=$weight[0]/$sumweight; foreach $i (1 .. $#DATA) { $cumprob_ctheta[$i]=$cumprob_ctheta[$i-1]+$weight[$i]/$sumweight; if ($cumprob_ctheta[$i]>1-1/$resolution) { $cumprob_ctheta[$i]=1; }; };  
+ open(TABLE,">inc.cumprob_ctheta_compact"); foreach $i (0 .. $#DATA) { print TABLE "$cumprob_ctheta[$i] $ctheta[$i]\n"; }; close(TABLE); 
+ $j=0;
+ open(TABLE,">inc.cumprob_ctheta"); 
+ foreach $i (0 .. $resolution-1) { 
+  $cump = ($i+1)/$resolution; 
+  while ($cump > $cumprob_ctheta[$j]) { $j+=1; }; 
+  $proper_weighted_ctheta[$i]=$ctheta[$j]; 		# inc.cumprob_ctheta thus contains resolution values for cos(theta), all equally likely! 
+  print TABLE "$ctheta[$j]\n"; 
+ };
+ GREEN("created inc.cumprob_ctheta\n");
+};
+
+sub create_cum_probability_table_phi {
+ open(DATA,"<inc.phi_weight"); @DATA=<DATA>; close(DATA); @phi=();
+ $sumweight=0; foreach $i (0 .. $#DATA) { chomp $DATA[$i]; ($phi[$i],$weight[$i])=split(/ /,$DATA[$i]); $sumweight+=$weight[$i]; };
+ $cumprob_phi[0]=$weight[0]/$sumweight; foreach $i (1 .. $#DATA) { $cumprob_phi[$i]=$cumprob_phi[$i-1]+$weight[$i]/$sumweight; if ($cumprob_phi[$i]>1-1/$resolution) { $cumprob_phi[$i]=1; }; }; 
+ open(TABLE,">inc.cumprob_phi_compact"); foreach $i (0 .. $#DATA) { print TABLE "$cumprob_phi[$i] $phi[$i]\n"; }; close(TABLE);
+ $j=0;
+ open(TABLE,">inc.cumprob_phi");
+ foreach $i (0 .. $resolution-1) {
+  $cump = ($i+1)/$resolution;
+  while ($cump > $cumprob_phi[$j]) { $j+=1; };
+  $proper_weighted_phi[$i]=$phi[$j]; 
+  print TABLE "$phi[$j]\n";
+ };
+ GREEN("created inc.cumprob_phi\n");
+};
+
+sub RIS_theory {
+ $ave_cphi = 0;
+ $ave_sphi = 0;
+ $ave_ctheta = 0; 
+ $ave_stheta = 0; 
+ foreach $i (0 .. $#proper_weighted_ctheta) {
+  $mytheta     = acos($proper_weighted_ctheta[$i]); 
+  $ave_ctheta += $proper_weighted_ctheta[$i];
+  $ave_stheta += sin($mytheta);
+ }; 
+ foreach $i (0 .. $#proper_weighted_phi) {
+  $ave_cphi += cos($proper_weighted_phi[$i]); 
+  $ave_sphi += sin($proper_weighted_phi[$i]);
+ };
+ $ave_ctheta/=($#proper_weighted_ctheta+1); 
+ $ave_stheta/=($#proper_weighted_ctheta+1);
+ $ave_cphi/=($#proper_weighted_phi+1);
+ $ave_sphi/=($#proper_weighted_phi+1);
+ # print " CHECK list size      = $#proper_weighted_ctheta\n";
+ print "-------- properties of phantom reference chains --------\n";
+ # print "------------- PHANTOM REFERENCES CHAINS ----------------\n";
+ print " average <cos(theta)> = $ave_ctheta\n"; 
+ print " average <sin(theta)> = $ave_stheta\n";
+ print " average <cos(phi)>   = $ave_cphi\n";
+ print " average <sin(phi)>   = $ave_sphi\n"; 
+ $Cinfty = (ave_sphi**2+(1-$ave_cphi)**2)/(1-$ave_sphi**2-$ave_cphi**2)*(1+$ave_ctheta)/(1-$ave_ctheta);
+ $Ree2 = $Cinfty*$N*$b**2; 
+ print "                    N = $N\n";
+ print " analytic:     Cinfty = $Cinfty\n";
+ print " analytic:    < R^2 > = $Ree2\n";                 
+};
+
+sub create_parameter_file {
+ open(PAR,">inc.parameter"); print PAR<<EOF;
+       parameter(b 	= $b)
+       parameter(d      = $d)
+       parameter(d2  	= $d*$d)
+EOF
+ close(PAR);
+ open(PAR,">inc.skip"); print PAR<<EOF;
+       integer skipmany
+       parameter(skipmany=$skipmany)
+EOF
+ close(PAR);
+};
+
+$compile=1; $run=1; $copy=0; # defaults
+foreach $arg (@ARGV) { $pi=pi(); 
+ $calling_command .= "$arg "; 
+ ($field,$value)=split(/=/,$arg); $field=substr($field,1); if ((!$value)|($value eq 0)) { $value="0.0"; }; ($val1,$val2,$val3)=split(/,/,$value); 
+ print "ENTERED field [$field] value [$value]\n"; 
+ if      ($field eq "C") 	{ $chains=$value; 
+ } elsif ($field eq "h")        { HEADER; USAGE; exit; 
+ } elsif ($field eq "help")     { HEADER; USAGE; exit; 
+ } elsif ($field eq "N") 	{ $N=$value;  
+ } elsif ($field eq "b")	{ $b=$value; if ($b<0) { ERROR("bond length must be positive"); }; 
+ } elsif ($field eq "d") 	{ $d=$value; if ($d<0) { ERROR("diameter must be semipositive"); }; 
+ } elsif ($field eq "box") 	{ $box=$value; 
+ } elsif ($field eq "xlo")  	{ $xlo=$value;  
+ } elsif ($field eq "ylo")      { $ylo=$value; 
+ } elsif ($field eq "zlo")      { $zlo=$value; 
+ } elsif ($field eq "xhi")      { $xhi=$value; 
+ } elsif ($field eq "yhi")      { $yhi=$value; 
+ } elsif ($field eq "zhi")      { $zhi=$value; 
+ } elsif ($field eq "compile")  { $compile=1; $run=0; $copy=0;
+ } elsif ($field eq "run")      { $compile=1; $run=1;
+ } elsif ($field eq "runcopy")  { $compile=1; $run=1; $copy=1;
+ } elsif ($field eq "clean")    { CLEANUP; 
+ } elsif ($field eq "px")  	{ $periodx=1;
+ } elsif ($field eq "py")  	{ $periody=1;
+ } elsif ($field eq "pz")  	{ $periodz=1;
+ } elsif ($field eq "p")  	{ $periodx=1; $periody=1; $periodz=1;
+ } elsif ($field eq "tight")    { $tight=1; 
+ } elsif ($field eq "large")    { $large=1; 
+ } elsif ($field eq "seed")     { $seed=int(abs($val1)); $seed = 1+($seed % 100000); srand($seed);
+ } elsif ($field eq "X")        { $erpenbeck_f=$value; 
+ } elsif ($field eq "f")        { $erpenbeck_f=$value;
+ } elsif ($field eq "s")        { $erpenbeck_s=$value; 
+ } elsif ($field eq "version")  { HEADER; VERSION; CITEAS; exit;
+ } elsif ($field eq "citeas")   { HEADER; VERSION; CITEAS; exit;
+ } elsif ($field eq "v") 	{ HEADER; VERSION; CITEAS; exit;
+ } elsif ($field eq "12")       { $skipmany=1; 
+ } elsif ($field eq "123")      { $skipmany=2;
+ } elsif ($field eq "1234")     { $skipmany=3;
+ # anchoring condition
+ } elsif ($field eq "anchor0")  	{ $anchormode="$field"; 
+ } elsif ($field eq "anchorPLANE") 	{ $anchormode="$field"; $anchorvar1=$val1; $anchorvar2=$val2; 				if ($anchorvar3) { ERROR("too many parameters for $anchormode"); };
+ } elsif ($field eq "anchorOCYL")  	{ $anchormode="$field"; $anchorvar1=$val1; $anchorvar2=$val2; 				if ($anchorvar3) { ERROR("too many parameters for $anchormode"); };
+ } elsif ($field eq "anchorICYL")  	{ $anchormode="$field"; $anchorvar1=$val1; $anchorvar2=$val2;				if ($anchorvar3) { ERROR("too many parameters for $anchormode"); };
+ } elsif ($field eq "anchorOSPH")  	{ $anchormode="$field"; $anchorvar1=$val1; 						if ($anchorvar2) { ERROR("too many parameters for $anchormode"); };
+ } elsif ($field eq "anchorISPH")  	{ $anchormode="$field"; $anchorvar1=$val1;						if ($anchorvar2) { ERROR("too many parameters for $anchormode"); };
+ } elsif ($field eq "anchorICONE") 	{ $anchormode="$field"; $anchorvar1=$val1; $anchorvar2=$val2; $anchorvar3=$val3;	if ($anchorvar4) { ERROR("too many parameters for $anchormode"); };
+ } elsif ($field eq "anchorOCONE") 	{ $anchormode="$field"; $anchorvar1=$val1; $anchorvar2=$val2; $anchorvar3=$val3;	if ($anchorvar4) { ERROR("too many parameters for $anchormode"); };
+ } elsif ($field eq "anchorRANDOM")  	{ $anchormode="$field"; $anchorvar1=$val1;						if ($anchorvar2) { ERROR("too many parameters for $anchormode"); };
+ } elsif ($field eq "anchor")      	{ $anchormode="$field"; $anchorvar1=$val1;						if ($anchorvar2) { ERROR("too many parameters for $anchormode"); };
+ # confinement condition
+ } elsif ($field eq "confinementNONE")  { $confinmode=$field;									if ($confinvar1) { ERROR("too many parameters for $confinmode [DEBUG [$confinvar1]]"); };
+ } elsif ($field eq "confinementPLANE") { $confinmode=$field; $confinvar1=$val1; 						if ($confinvar2) { ERROR("too many parameters for $confinmode"); };
+ } elsif ($field eq "confinementAUTO")  { $confinmode=$field;									if ($confinvar1) { ERROR("too many parameters for $confinmode"); };
+ } elsif ($field eq "confinementOCYL")  { $confinmode=$field; $confinvar1=$val1; $confinvar2=$val2;				if ($confinvar3) { ERROR("too many parameters for $confinmode"); };
+ } elsif ($field eq "confinementICYL")  { $confinmode=$field; $confinvar1=$val1; $confinvar2=$val2;				if ($confinvar3) { ERROR("too many parameters for $confinmode"); };
+ } elsif ($field eq "confinementOSPH")  { $confinmode=$field; $confinvar1=$val1;						if ($confinvar2) { ERROR("too many parameters for $confinmode"); };
+ } elsif ($field eq "confinementISPH")  { $confinmode=$field; $confinvar1=$val1;						if ($confinvar2) { ERROR("too many parameters for $confinmode"); };
+ } elsif ($field eq "confinementOCONE") { $confinmode=$field; $confinvar1=$val1; $confinvar2=$val2; $confinvar3=$val3;		if ($confinvar4) { ERROR("too many parameters for $confinmode"); };
+ } elsif ($field eq "confinementICONE") { $confinmode=$field; $confinvar1=$val1; $confinvar2=$val2; $confinvar3=$val3;		if ($confinvar4) { ERROR("too many parameters for $confinmode"); };
+ } elsif ($field eq "confinement")      { $confinmode=$field; $confinvar1=$val1;						if ($confinvar2) { ERROR("too many parameters for $confinmode"); };
+ # bending energy
+ } elsif ($field eq "bendRANDOM")       { $bendmode=$field; 									if ($bendvar1) { ERROR("too many parameters for $bendmode"); };
+ } elsif ($field eq "bend")         	{ $bendmode=$field; $bendvar1=$val1;							if ($bendvar2) { ERROR("too many parameters for $bendmode"); };
+ } elsif ($field eq "bendWLC")    	{ $bendmode=$field; $bendvar1=$val1;							if ($bendvar2) { ERROR("too many parameters for $bendmode"); };
+ } elsif ($field eq "bendFUNC")   	{ $bendmode=$field; $bendvar1=$val1;							if ($bendvar2) { ERROR("too many parameters for $bendmode"); };
+ } elsif ($field eq "bendTABLE")  	{ $bendmode=$field; $bendvar1=$val1;							if ($bendvar2) { ERROR("too many parameters for $bendmode"); };
+ # torsion energy
+ } elsif ($field eq "torsRANDOM")  	{ $torsmode=$field;									if ($torsvar1) { ERROR("too many parameters for $torsmode"); };
+ } elsif ($field eq "torsTGG")       	{ $torsmode=$field; $torsvar1=$val1;							if ($torsvar2) { ERROR("too many parameters for $torsmode"); };
+ } elsif ($field eq "torsFUNC")       	{ $torsmode=$field; $torsvar1=$val1;							if ($torsvar2) { ERROR("too many parameters for $torsmode"); };
+ } elsif ($field eq "torsTABLE")       	{ $torsmode=$field; $torsvar1=$val1;							if ($torsvar2) { ERROR("too many parameters for $torsmode"); };
+# } elsif ($field =~ /^tors/) 		{ $torsmode=$field; $torsvar1=$val1;   $torsvar2=$val2;   $torsvar3=$val3; 		if ($torsvar4) { ERROR("too many parameters for $torsmode"); };
+ # output
+ } elsif ($field eq "output")   	{ $outputfile=$val1; 
+ } else { 
+  ERROR("unknown option [$arg] $field=$value\n"); 
+ };
+}; 
+
+open(CC,">_perl_arguments"); print CC "$calling_command"; close(CC);
+
+print "<hr>\n";
+
+$NOTE.="note: call with argument -help or -h or -h|more for help\n"; 
+if (!$chains) 		 	{ $chains=1; $NOTE.="note: missing -C=.. interpreted as -C=$chains\n"; };
+if (!$N)                        { HEADER; VERSION; CITEAS; ERROR("missing -N=..\n"); };
+if (!$b) 		 	{ $b=1.0; $NOTE.="note: missing -b=.. interpreted as b=$b a.u.\n"; }; 
+if (!$d) 		 	{ $d=$b; $NOTE.="note: missing -d=.. interpreted as diameter d=$d a.u.\n"; }; 
+if (!$periodx)  		{ $periodx=0; };
+if (!$periody)                  { $periody=0; };
+if (!$periodz)                  { $periodz=0; };
+if (!$anchormode)               { $NOTE.= "note: using default -anchor0\n"; 	    $anchormode="anchor0"; };
+if (!$confinmode) 		{ $NOTE.= "note: using default -confinementNONE\n"; $confinmode="confinementNONE"; }; 
+if (!$bendmode)  		{ $NOTE.= "note: using default -bendRANDOM\n";      $bendmode="bendRANDOM"; }; 
+if (!$torsmode)  		{ $NOTE.= "note: using default -torsRANDOM\n";      $torsmode="torsRANDOM"; }; 
+if ($tight)                     { $NOTE.= "note: using -tight and thus ignoring any settings for box, xlo, xhi etc\n"; $xlo=0; $ylo=0; $zlo=0; $xhi=0; $yhi=0; $zhi=0; };  	# tight == unset xlo etc.
+if ($box)                       { $xlo=-$box/2; $xhi=-$xlo; $ylo=$xlo; $yhi=$xhi; $zlo=$xlo; $zhi=$xhi; $tight=0; $NOTE.="note: xlo xhi etc set by box=$box\n"; };
+if (!$outputfile) 		{ $outputfile="dump"; $NOTE.="note: using default output file name $outputfile\n"; };  
+if (!$skipmany)  		{ $skipmany=0; }; 
+
+if    ($outputfile eq "xyz") 	  { $outputformat=1; }
+elsif ($outputfile eq "dump")  	  { $outputformat=2; }
+elsif ($outputfile eq "Z1")  	  { $outputformat=3; }
+elsif ($outputfile eq "d3D")      { $outputformat=4; }
+elsif ($outputfile eq "ee")       { $outputformat=5; } 
+elsif ($outputfile eq "mol2")  	  { $outputformat=6; } 
+elsif ($outputfile eq "fn")       { $outputformat=7; }
+elsif ($outputfile eq "gro") 	  { $outputformat=8; } 
+elsif ($outputfile eq "pdb")   	  { $outputformat=9; } 
+elsif ($outputfile eq "dxy")	  { $outputformat=4; } # creates config.d3D and later uses gensaw-density3D-to-other .. 
+elsif ($outputfile eq "dxz")	  { $outputformat=4; } # ..
+elsif ($outputfile eq "dyz")	  { $outputformat=4; }
+elsif ($outputfile eq "drx")	  { $outputformat=4; }
+elsif ($outputfile eq "dry")	  { $outputformat=4; }
+elsif ($outputfile eq "drz")	  { $outputformat=4; }
+else 				  { ERROR("unknown output option $outputfile\n"); };   
+
+if ($d > $b*(1+$skipmany))        { ERROR("diameter (d) > (1+$skipmany) bond length (b) is not supported\n"); };
+
+
+#if (!$thetaset) 	 	{ $thetaDEG=68; $thetamode=1; $NOTE.="note: missing -theta=.. interpreted as theta = $thetaDEG DEG\n"; $theta_fixed=$thetaDEG/180*$pi; };  
+#if (!$energymode) 	 	{ $NOTE.="note: missing -energymode=.. interpreted as -energymode=\"tgg, 0.333\" (freely rotating chain)\n"; $energymode=1; $ptrans=1/3; };  
+#if (!$thetamode)   	 	{ ERROR("missing -theta=..\n"); }; 
+#if ($M0)  		 	{ $mol=6.023e23; $gr=1e-3; $cm=1e-2; $Ang=1e-10; $M0SI=$M0*$gr/$mol; $rhoSI=$rho*$gr/$cm**3; $bulkdens = $rhoSI/$M0SI*$Ang**3; }; 
+#if (!$ptrans)  		 	{ $ptrans=-1; }; 
+#if (!$areaperchain)  	 	{ $areaperchain=-1; }; 
+#if (!$anchortuberadius)  	{ $anchortuberadius=-1; }; 
+#if (!$anchortubelength)  	{ $anchortubelength=-1; }; 
+#if (!$anchorsmallradius) 	{ $anchorsmallradius=-1; }; 
+#if (!anchorlargeradius)  	{ $anchorlargeradius=-1; }; 
+#if (!anchorconeheight)   	{ $anchorconeheight=-1; }; 
+#if (!$zlo) 		 	{ $zlo=-1; };
+#if (!$confinementtuberadius) 	{ $confinementtuberadius=-1; }; 
+
+$NOTE.="note: box periodicities (0/1) in x y z directions: $periodx $periody $periodz\n";
+
+`rm -f inc.overlap-used`; 
+if ($d eq "0.0") { `cp $instdir/inc.phantom inc.overlap-used`; $NOTE.="note: using inc.phantom since d=$d\n"; } else { `cp $instdir/inc.overlap inc.overlap-used`; $NOTE.="note: diameter d=$d\n"; }; 
+
+`rm -f inc.strategy`; 
+if (($erpenbeck_f>0)&($erpenbeck_s>0)) { $NOTE.="note: using the manually set parameters X=$erpenbeck_f and s=$erpenbeck_s\n"; 
+ open(STRATEGY,">inc.strategy"); 	 print STRATEGY "       erpenbeck_f = $erpenbeck_f; erpenbeck_s = $erpenbeck_s"; close(STRATEGY);  
+} elsif ("$erpenbeck_f" eq "0.0")      { $erpenbeck_s=$N+1; $NOTE.="note: brute force generation of short chains, no branching\n";
+ open(STRATEGY,">inc.strategy");         print STRATEGY "       erpenbeck_f = $erpenbeck_f; erpenbeck_s = $erpenbeck_s"; close(STRATEGY);
+} else { 			 	 $NOTE.="note: automatically determining branching parameters [$erpenbeck_f]\n";	
+ open(STRATEGY,">inc.strategy"); 	 print STRATEGY "       call optimize_erpenbeck_strategy_III"; close(STRATEGY); 
+}; 
+
+`rm -f inc.ctheta_weight`;
+HANDLE_BEND_MODES; `sleep 0.01`; 
+if (-s "inc.ctheta_weight") { GREEN("created inc.ctheta_weight\n"); } else { ERROR("crashed during generation of inc.ctheta_weight"); };
+create_cum_probability_table_ctheta;
+
+`rm -f inc.phi_weight`; 
+HANDLE_TORS_MODES; `sleep 0.01`; 
+if (-s "inc.phi_weight") { GREEN("created inc.phi_weight\n"); } else { ERROR("crashed during generation of inc.phi_weight"); }; 
+create_cum_probability_table_phi;
+
+`rm -f inc.anchors`; 
+HANDLE_ANCHOR_MODES; `sleep 0.01`; 
+if (-s "inc.anchors")   { GREEN("created inc.anchors\n"); } else { ERROR("crashed during generation of inc.anchors"); };
+
+`rm -f inc.outside`; 
+HANDLE_CONFIN_MODES; `sleep 0.01`; 
+if (-s "inc.outside") { GREEN("created inc.outside\n"); } else { ERROR("crashed during generation of inc.outside"); };
+open(OUTSIDE,"<inc.outside"); @OUTSIDE=<OUTSIDE>; close(OUTSIDE); open(OUTSIDE,">inc.outside"); foreach $i (0 .. $#OUTSIDE) { print OUTSIDE "        $OUTSIDE[$i]"; }; close(OUTSIDE);
+
+$boxx=$xhi-$xlo; 
+$boxy=$yhi-$ylo;
+$boxz=$zhi-$zlo;
+if ($xlo>$xhi) { ERROR("xlo>xhi\n"); }; 
+if ($ylo>$yhi) { ERROR("ylo>yhi\n"); };
+if ($zlo>$zhi) { ERROR("zlo>zhi\n"); };
+
+create_parameter_file; 
+
+
+
+`rm -f inc.box`; 
+
+if (!$xlo) { ERROR("xlo undefined (set xlo or choose -tight or -large or -box=..)\n"); }; 
+if (!$ylo) { ERROR("ylo undefined (set ylo or choose -tight or -large or -box=..)\n"); };
+if (!$zlo) { ERROR("zlo undefined (set zlo or choose -tight or -large or -box=..)\n"); };
+if (!$xhi) { ERROR("xhi undefined (set xhi or choose -tight or -large or -box=..)\n"); };
+if (!$yhi) { ERROR("yhi undefined (set yhi or choose -tight or -large or -box=..)\n"); };
+if (!$zhi) { ERROR("zhi undefined (set zhi or choose -tight or -large or -box=..)\n"); };
+
+$Volume = ($xhi-$xlo)*($yhi-$ylo)*($zhi-$zlo); 											
+if ($Volume eq 0) { ERROR("your box has zero volume"); }; 
+$VolumeFraction = $N*$pi/6*$d**3/$Volume; 
+if ($VolumeFraction > 0.63) { ERROR("system too dense ($VolumeFraction), cannot be packed"); }; 	
+if ($VolumeFraction > 0.1) { ERROR("system too dense ($VolumeFraction), too inefficient for the gui"); };
+
+
+if ($outputformat eq 4) {
+ $densMX = 1+int($xhi-$xlo); 
+ $densMY = 1+int($yhi-$ylo);	# hereby chosen resoltion is fixed to 1 a.u.
+ $densMZ = 1+int($zhi-$zlo);
+ open(R,">inc.outputformat"); print R "      integer densMX,densMY,densMZ\n       parameter(outputformat=$outputformat,densMX=$densMX,densMY=$densMY,densMZ=$densMZ)\n       integer densHIST(densMX,densMY,densMZ)\n        common /com_dens/ densHIST"; close(R);
+} elsif ($outputformat eq 7) {
+ open(R,">inc.outputformat"); print R "      parameter(outputformat=$outputformat)\n       integer densHIST(1,1,1),densMX,densMY,densMZ\n       common /com_fn/ fn"; close(R);
+} else {
+ open(R,">inc.outputformat"); print R "      parameter(outputformat=$outputformat)\n       integer densHIST(1,1,1),densMX,densMY,densMZ"; close(R);
+}; 
+
+open(BOX,">inc.box");    print BOX "       parameter(xlo=$xlo, xhi=$xhi, ylo=$ylo, yhi=$yhi, zlo=$zlo, zhi=$zhi)\n"; $NOTE.="note: xlo=$xlo, xhi=$xhi\n";
+	 	 	 print BOX "       parameter(boxx=$boxx, boxy=$boxy, boxz=$boxz)\n"; close(BOX); GREEN("created inc.box\n");
+
+open(R,">inc.resolution"); print R "       parameter(resolution=$resolution)\n"; close(R);
+open(R,">inc.N"); 	   print R "       parameter(chains=$chains,N=$N)\n"; close(R); open(R,">_N_chains"); print R "$N $chains"; close(R); GREEN("created _N_chains\n");
+open(R,">inc.periodic");   print R "       parameter(periodx=$periodx, periody=$periody, periodz=$periodz)\n"; close(R); open(R,">_periodic_d"); print R "$periodx $periody $periodz $d"; close(R); GREEN("created inc.periodic and _periodic_d\n"); 
+$decatoms = 2+int(0.434*log($N*$chains));
+$decmol   = 2+int(0.434*log($chains));
+open(R," >inc.format");    print R "111    format(3(F12.3,1x))\n"; close(R); 
+open(R,">>inc.format");    print R "112    format(I$decatoms,1x,I$decmol,1x,I1,1x,3(F12.3,1x))\n"; close(R);
+open(R,">>inc.format");    print R "113    format(3(F12.3,1x))\n"; close(R);
+open(R,">>inc.format");    print R "114    format(3(F12.3,1x),I15)\n"; close(R); 
+open(R,">>inc.format");    print R "601    format(I7,1x,I7,1x,I1,1x,I1,1x,I1)\n"; close(R); 
+open(R,">>inc.format");    print R "602    format(I7,1x,A1,I7,1x,3(F10.3,1x),A1,1x,A1,1x,A3,1x,A3)\n"; close(R);
+open(R,">>inc.format");    print R "603    format(I7,1x,I7,1x,I7,1x,I1)\n"; close(R);
+if ($seed) { open(SEED,">.seed"); print SEED "$seed $seed $seed $seed $seed $seed $seed $seed $seed $seed $seed $seed"; close(SEED); }; # changed 10 may 2022
+
+open(R,">_animate_xyz_parameters"); print R "$N $chains $periodx $periody $periodz $xlo $xhi $ylo $yhi $zlo $zhi\n"; close(R); 
+
+foreach $file ("inc.anchors","inc.box","inc.outside","inc.phi_weight","inc.ctheta_weight","inc.cumprob_phi_compact","inc.cumprob_ctheta_compact","inc.outputformat","inc.cumprob_phi","inc.cumprob_ctheta","inc.resolution","inc.N","inc.format","inc.periodic","inc.parameter") { 
+ print "<hr>REVIEW $file\n",`cat $file | head -10`; 
+}; 
+
+# obtain source
+`cp $instdir/$code.f90 ./`; 
+
+if ($compile eq 1) { 
+ foreach $compiler (@COMPILER) { print "<hr>compiling using $compiler .. "; 
+  print `rm -f $code.ex; $compiler $code.f90 -o $code.ex 2> _error_compiler`; print "done.\n"; if (-s "$code.ex") { GREEN("compiled successfully\n"); last; } else { ERROR(`cat _error_compiler`,"compilation failed. Inspect the function syntax and inc.compiler\n"); }; 
+ }; 
+}; 
+
+if ($run eq 1)     { 
+ `rm -f _code_error`; 
+ print "--------------- started running ------------------------\n";
+ open my $cmd_mk, "./$code.ex |"; while (<$cmd_mk>) { print "$_"; }; GREEN("finished running\n"); 
+ if (-s "_code_error") {
+  ERROR(`cat _code_error`); 
+ }; 
+} else {
+ $NOTE.="note: add -run to run the code!\n"; 
+};
+
+# extract density profiles
+if 	($outputfile eq "dxy") { `perl $instdir/gensaw-density3D-to-other $xlo $xhi $ylo $yhi $zlo $zhi xy`;
+} elsif ($outputfile eq "dxz") { `perl $instdir/gensaw-density3D-to-other $xlo $xhi $ylo $yhi $zlo $zhi xz`;
+} elsif ($outputfile eq "dyz") { `perl $instdir/gensaw-density3D-to-other $xlo $xhi $ylo $yhi $zlo $zhi yz`;
+} elsif ($outputfile eq "drx") { `perl $instdir/gensaw-density3D-to-other $xlo $xhi $ylo $yhi $zlo $zhi rx`;
+} elsif ($outputfile eq "dry") { `perl $instdir/gensaw-density3D-to-other $xlo $xhi $ylo $yhi $zlo $zhi ry`;
+} elsif ($outputfile eq "drz") { `perl $instdir/gensaw-density3D-to-other $xlo $xhi $ylo $yhi $zlo $zhi rz`;
+}; 
+
+if ($copy eq 1)    { print `perl ./make_copy_test`; }; 
+
+RIS_theory;
+
+$NOTE.="note: calling command: $calling_command\n";
+
+NOTES;
+if (-s "_ee")  	   { open(ee,"<_ee"); $ee=<ee>+0; $err_ee=<ee>+0; close(ee); print "measured <R^2> = ",color("green"),"$ee +/- $err_ee",color("reset"),"\n"; };
+if (-s "_created") { open(CREATED,"<_created"); $CREATED=<CREATED>;   close(CREATED); print "created: ",color("green"),$CREATED,color("reset"); };
+
+
+$suggested_praefix = "PAR$calling_command"; $suggested_praefix=~s/\"//g; $suggested_praefix=~s/ //g; 
+open(CC,">_suggested_praefix"); print CC "$suggested_praefix"; close(CC); 
+

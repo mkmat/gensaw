@@ -1,0 +1,97 @@
+#! /usr/bin/perl
+
+use Term::ANSIColor;
+
+print<<EOF;
+    _____   _____   _    _   _____      _   __        __                                                    __________________
+   / ____| | ____| | \\  | | / ____/    / \\  \\ \\  __  / /                                            __    _/
+  / / ___  | __    |  \\ | | \\_____    / _ \\  \\ \\/  \\/ /       (c) 2021 mk\@mat.ethz.ch              /  \\__/
+  \\ \\___ \\ | ____  | | \\  |  ____ \\  / ___ \\  \\  /\\  /        www.complexfluids.ethz.ch        _  /
+   \\_____/ |_____| |_|  \\_| /_____/ /_/   \\_\\  \\/  \\/_________________________________________/ \\/
+
+EOF
+
+
+$source[$#source+1]="gensaw-generic.f90";
+$source[$#source+1]="gensaw-install";
+$source[$#source+1]="gensaw-generic";
+$source[$#source+1]="inc.overlap";
+$source[$#source+1]="inc.phantom";
+$source[$#source+1]="inc.tictoc";
+$source[$#source+1]="gensaw-erase-blanks";
+$source[$#source+1]="gensaw-density3D-to-other";
+$source[$#source+1]="gensaw-README.txt";
+$source[$#source+1]="gensaw-visualization.jar";
+
+$ok  = color("green"); $ok.="ok"; $ok.=color("reset");
+$bad = color("yellow"); $bad.="bad"; $bad.=color("reset");
+$skip = color("yellow"); $skip.="skip"; $skip.=color("reset");
+
+foreach $s (@source) { if (-s "$s") { print "checking source: $s .. ",$ok,"\n"; $PACK.="$s "; } else { print "missing: $s\n"; exit; }; };
+
+# pack 
+if ($ARGV[0] eq "-pack") { print `tar -c -v -f gensaw.tar $PACK`; exit; }; 
+
+# determine instdir
+$instdir=`pwd`; chomp $instdir; 
+
+# --------- list of compilers (feel free to add your preferred compiler on top of the list) 
+$gfortran = `which gfortran`; chomp $gfortran; 	if ($gfortran) 	{ $Compiler[$#Compiler+1]="$gfortran -cpp -ffree-line-length-none"; }; 
+$ifort    = `which ifort`; chomp $ifort;        if ($ifort)     { $Compiler[$#Compiler+1]="$ifort -O3"; };
+$f95 	  = `which f95`; chomp $f95; 		if ($f95) 	{ $Compiler[$#Compiler+1]="$f95 -free -O3"; }; 
+$f90 	  = `which f90`; chomp $f90; 		if ($f90) 	{ $Compiler[$#Compiler+1]="$f90 -O3"; }; 
+# ---------------------------------------------------------------------------
+
+# add existing compilers to inc.compiler
+`rm -f $instdir/inc.compiler`; 
+print "looking for compiler ..\n"; foreach $i (0 .. $#Compiler) { ($compiler,$option)=split(/ /,$Compiler[$i]); 
+ if (`which $compiler`) { print "available compiler: $compiler ",$ok,"\n"; `echo "$Compiler[$i]" >> $instdir/inc.compiler`; } else { print $skip,"\n"; }; 
+}; 
+if (-s "$instdir/inc.compiler") { print "compiler found .. ",$ok,"\n"; } else { print "add your compiler to the list in $0 ",color("yellow"),"todo",color("reset"),"\n"; exit; }; 
+
+# find perl path
+$PERL=`which perl`; chomp $PERL; $PERL=~s/\//\\\//g;
+if (!$PERL) { print color("yellow"),"gensaw requires an existing perl installation to run (www.perl.org)",color("reset"),"\n"; exit; }; 
+
+$INSTDIR="$instdir"; $INSTDIR=~s/\//\\\//g;
+
+print "creating gensaw ..\n"; `cp gensaw-generic gensaw`; `sed -i'.bak' '1,\$ s/INSTDIR/$INSTDIR/g' gensaw`; `sed -i'.bak' '1,\$ s/PERLCOMMAND/$PERL/g' gensaw`; `chmod 755 gensaw`; 
+print "creating gensaw-algorithm.f90 ..\n"; `cp gensaw-generic.f90 gensaw-algorithm.f90`; `sed -i'.bak' '1,\$ s/INSTDIR/$INSTDIR/g' gensaw-algorithm.f90`; 
+`rm -f gensaw.bak gensaw-algorithm.f90.bak`; 
+if (-s "gensaw") { print "\ngensaw successfully installed ",$ok,"\n";
+
+$CHAINS=100000; print "\nnow reproducing Table 1 of the manuscript (test runs 1, here only with C=$CHAINS chains) ..\n"; $testdir=".gensaw-testruns"; `rm -rf $testdir; mkdir $testdir; cp gensaw $testdir`; 
+####$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bend=1";  				  $ee_target[$#TEST] = 9949.43;
+
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bend=60";  					  $ee_target[$#TEST] = 296;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bendWLC=5";					  $ee_target[$#TEST] = 860.413;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bendWLC=10";					  $ee_target[$#TEST] = 1720.01;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bend=60 -torsTGG=0.3";			  $ee_target[$#TEST] = 268.517;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bend=90 -torsTGG=0.5";			  $ee_target[$#TEST] = 164.889;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bendWLC=5 -torsTGG=0.3";			  $ee_target[$#TEST] = 801.96;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bendWLC=2 -torsTGG=0.5";			  $ee_target[$#TEST] = 447.072;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bendFUNC=\"-theta**2\"";			  $ee_target[$#TEST] = 6.153;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bendFUNC=\"-theta**2\" -torsFUNC=\"-phi**2\""; $ee_target[$#TEST] = 78.78;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bendWLC=5 -torsFUNC=\"-phi**3\"";		  $ee_target[$#TEST] = 2968.07;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee -bendFUNC=\"-theta**2\" -torsFUNC=\"phi**2\"";  $ee_target[$#TEST] = 3.176;
+$TEST[$#TEST+1] = "-C=$CHAINS -N=100 -b=1 -d=0 -confinementNONE -large -output=ee";						  $ee_target[$#TEST] = 100;
+
+# added in proof stage
+$TEST[$#TEST+1] = "-C=10000 -N=49 -b=0.5 -d=0.56612 -bend=68 -p -12 -confinementICYL=25.0,5 -anchorICYL=25.0,5 -xlo=-26 -ylo=-26 -zlo=0.0 -xhi=26 -yhi=26 -zhi=5 -torsTGG=0.3333333 -output=ee -X=0"; $ee_target[$#TEST] = 50.53;
+$TEST[$#TEST+1] = "-C=10000 -N=49 -b=0.5 -d=0.56612 -bend=68 -p -12 -confinementICYL=25.0,5 -anchorICYL=25.0,5 -xlo=-26 -ylo=-26 -zlo=0.0 -xhi=26 -yhi=26 -zhi=5 -torsTGG=0.3333333 -output=ee"; $ee_target[$#TEST] = 50.53;
+
+$oks=-1; 
+foreach $i (0 .. $#TEST) { $test=$TEST[$i]; 
+ print "[$i/$#TEST] currently executing: gensaw $test .. "; `cd $testdir; perl ./gensaw $test`; 
+ if (-s "$testdir/_ee") { } else { print "gensaw did not run. Error messages available in $testdir/_error_compiler. Please contact mk.\n"; exit; };
+ open(ee,"<$testdir/_ee"); $ee=<ee>+0; $err_ee=<ee>+0; close(ee); $rel_dev = 100*abs(1-$ee/$ee_target[$i]); 
+ open(speed,"<$testdir/_musecs_per_atom"); $musecs_per_atom=<speed>+0; $musecs_per_atom=int(0.5+1000*$musecs_per_atom)/1000; close(speed);
+ print "<R^2> = $ee +/- $err_ee [$musecs_per_atom e-6 secs/node] "; if ($rel_dev < 3) { $oks+=1; print $ok,"\n"; } else { print $bad,"\n"; };  
+};
+`rm -rf $testdir`; if ($oks eq $#TEST) { print "All tests passed ",$ok,"\n"; } else { print "If most tests passed, you were just unlucky this time but the program works properly ",$ok,"\n"; }; 
+if ($oks eq -1) { print "gensaw does not operate properly with your compiler. Contact mk@mat.ethz.ch and provide some details. ",$bad,"\n"; exit; }; 
+
+if (-s ".seed") { `chmod 777 .seed`; }; `chmod 755 inc.*`; 
+
+print "\nYou can now copy the gensaw script to your working directory and call: ",color("green"),"perl ./gensaw -h|more",color("reset")," there.\n"; } else { print "installation failed. ",$bad,"\n"; };
+

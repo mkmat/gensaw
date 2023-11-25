@@ -1,0 +1,38 @@
+#! /usr/bin/perl
+
+$binsize = 1;   # radial field (resolution is 1 in RIS..f90 ?
+
+$xlo	= $ARGV[0]; $xhi = $ARGV[1];
+$ylo	= $ARGV[2]; $yhi = $ARGV[3];
+$zlo	= $ARGV[4]; $zhi = $ARGV[5];
+$mode	= $ARGV[6]; 
+if (!$mode) { print "use as: perl ./gensaw_density3D_to_other xlo xhi ylo yhi zlo zhi xy|xz|yz|rx|ry|rz\n"; exit; }; 
+
+open(D,"<config.d3D"); @D=<D>; close(D); 
+
+sub STRIP { chomp $_[0]; $_[0]=~s/^\s+//g; $_[0]=~s/\s+$//; $_[0]=~s/\s+/ /g; $_[0]; };
+
+open(OUT,">config.d$mode"); 
+if      ($mode eq "xy") { 
+ foreach $line (@D) { $line=STRIP($line); ($x,$y,$z,$value)=split(/ /,$line); $ix=$x-$xlo+0.5; $iy=$y-$ylo+0.5; $X[$ix][$iy]+=$value; };
+ foreach $ix (1 .. $xhi-$xlo) { foreach $iy (1 .. $yhi-$ylo) { $x=$xlo+$ix-0.5; $y=$ylo+$iy-0.5; if ($X[$ix][$iy]) { print OUT "$x $y $X[$ix][$iy]\n"; }; }; }; 
+} elsif ($mode eq "xz") {
+ foreach $line (@D) { $line=STRIP($line); ($x,$y,$z,$value)=split(/ /,$line); $ix=$x-$xlo+0.5; $iz=$z-$zlo+0.5; $X[$ix][$iz]+=$value; };
+ foreach $ix (1 .. $xhi-$xlo) { foreach $iz (1 .. $zhi-$zlo) { $x=$xlo+$ix-0.5; $z=$zlo+$iz-0.5; if ($X[$ix][$iz]) { print OUT "$x $z $X[$ix][$iz]\n"; }; }; };
+} elsif ($mode eq "yz") {
+ foreach $line (@D) { $line=STRIP($line); ($x,$y,$z,$value)=split(/ /,$line); $iy=$y-$ylo+0.5; $iz=$z-$zlo+0.5; $X[$iy][$iz]+=$value; };
+ foreach $iy (1 .. $yhi-$ylo) { foreach $iz (1 .. $zhi-$zlo) { $y=$ylo+$iy-0.5; $z=$zlo+$iz-0.5; if ($X[$iy][$iz]) { print OUT "$y $z $X[$iy][$iz]\n"; }; }; };
+} elsif ($mode eq "rx") {
+ foreach $line (@D) { $line=STRIP($line); ($x,$y,$z,$value)=split(/ /,$line); $r=sqrt($y**2+$z**2); $bin=int($r/$binsize); $R[$bin]+=$value; };
+ foreach $ir (0 .. int(sqrt(($xhi-$xlo)**2+($yhi-$ylo)**2+($zhi-$zlo)**2))) { $r=($ir+0.5)*$binsize; if ($R[$ir]) { print OUT "$r $R[$ir]\n"; }; }; 
+} elsif ($mode eq "ry") {
+ foreach $line (@D) { $line=STRIP($line); ($x,$y,$z,$value)=split(/ /,$line); $r=sqrt($x**2+$z**2); $bin=int($r/$binsize); $R[$bin]+=$value; };
+ foreach $ir (0 .. int(sqrt(($xhi-$xlo)**2+($yhi-$ylo)**2+($zhi-$zlo)**2))) { $r=($ir+0.5)*$binsize; if ($R[$ir]) { print OUT "$r $R[$ir]\n"; }; };
+} elsif ($mode eq "rz") {
+ foreach $line (@D) { $line=STRIP($line); ($x,$y,$z,$value)=split(/ /,$line); $r=sqrt($x**2+$y**2); $bin=int($r/$binsize); $R[$bin]+=$value; };
+ foreach $ir (0 .. int(sqrt(($xhi-$xlo)**2+($yhi-$ylo)**2+($zhi-$zlo)**2))) { $r=($ir+0.5)*$binsize; if ($R[$ir]) { print OUT "$r $R[$ir]\n"; }; };
+} else { close(OUT); `rm -f config.d$mode`; die 'bad option';   
+} 
+close(OUT); 
+open(OUT,">_config"); print OUT "config.d$mode"; close(OUT);
+open(OUT,">_created"); print OUT "config.d$mode\n"; close(OUT);
