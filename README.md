@@ -7,6 +7,8 @@ O. Weismantel, A.A. Galata, M. Sadeghi, A. Kröger, M. Kröger,
 Efficient generation of self-avoiding, semiflexible rotational isomeric chain ensembles in bulk, in confined geometries, and on surfaces, 
 Computer Physics Communications **270** (2022) 108176
 
+DOI: https://doi.org/10.1016/j.cpc.2021.108176
+
 Link to the article: https://www.sciencedirect.com/science/article/pii/S0010465521002885
 
 Link to Mendeley: https://data.mendeley.com/datasets/8xfgf88f3w/1
