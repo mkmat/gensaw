@@ -1,4 +1,4 @@
-# gensaw
+# gensaw (code)
 ## Efficient generation of self-avoiding, semiflexible rotational isomeric chain ensembles in bulk, in confined geometries, and on surfaces
 
 The code available from this repository had been published in
