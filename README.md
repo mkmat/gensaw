@@ -256,7 +256,7 @@ note: all lengths have to be specified using the same user-chosen units. The res
    Each row contains two values: dihedral angle in radiants, and dimensionless torsion energy. If the table contains less
    than 10 rows, the angles are interpreted at fixed torsion angles with their corresponding energies.
   
-### EXAMPLES; 
+### Examples 
 
       perl ./gensaw -C=10 -N=100 -b=1 -tight -output=d3D
       perl ./gensaw -C=10 -N=100 -b=1 -tight -output=dump
@@ -276,4 +276,6 @@ note: all lengths have to be specified using the same user-chosen units. The res
       
       perl ./gensaw -N=156 -C=1000 -tight -b=0.154 -d=0.3 -123 -bendFUNC="128.89*(theta-1.187)**2" -torsFUNC="1.119*(2.217-2.905*cos(phi)-3.135*cos(phi)**2+0.731*cos(phi)**3+6.271*cos(phi)**4+7.527*cos(phi)**5)"
 
+### Problems? 
 
+If you experience any problems please contact the author. 
