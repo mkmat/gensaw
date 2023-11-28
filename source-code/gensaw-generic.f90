@@ -1,7 +1,7 @@
 	program gensaw_algorithm
 
 ! (c) mk@mat.ethz.ch 10 feb 2021
-! (c) mk@mat.ethz.ch 25 nov 2023 (added missing then-endif in one place)
+! (c) mk@mat.ethz.ch 25 nov 2023 (revisions marked by revised 25 nov 2023)
 
 ! notes: 
 ! all parameters, anchoring conditions, probabilities, box sizes on file 
@@ -106,7 +106,7 @@
 	 charperiod(1)='ff '; if (periodx.eq.1) charperiod(1)='pp '
          charperiod(2)='ff '; if (periody.eq.1) charperiod(2)='pp '
  	 charperiod(3)='ff '; if (periodz.eq.1) charperiod(3)='pp '
-	 write(11,'(A)') 'ITEM: BOX BOUNDS '//charperiod(1)//charperiod(2)//charperiod(2)
+	 write(11,'(A)') 'ITEM: BOX BOUNDS '//charperiod(1)//charperiod(2)//charperiod(3)    ! (revised 25 nov 2023)
 	 write(11,*) xlo,xhi
 	 write(11,*) ylo,yhi
 	 write(11,*) zlo,zhi

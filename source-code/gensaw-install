@@ -22,6 +22,8 @@ $source[$#source+1]="gensaw-erase-blanks";
 $source[$#source+1]="gensaw-density3D-to-other";
 $source[$#source+1]="gensaw-README.txt";
 $source[$#source+1]="gensaw-visualization.jar";
+$source[$#source+1]="gensaw-dump2data.pl";
+$source[$#source+1]="gensaw-README.md";
 
 $ok  = color("green"); $ok.="ok"; $ok.=color("reset");
 $bad = color("yellow"); $bad.="bad"; $bad.=color("reset");
