@@ -1,7 +1,7 @@
 # gensaw (code)
 ## Efficient generation of self-avoiding, semiflexible rotational isomeric chain ensembles in bulk, in confined geometries, and on surfaces
 
-The code available from this repository had been published in
+The code available from the current repository https://github.com/mkmat/gensaw had been published in
 
 O. Weismantel, A.A. Galata, M. Sadeghi, A. Kröger, M. Kröger, 
 Efficient generation of self-avoiding, semiflexible rotational isomeric chain ensembles in bulk, in confined geometries, and on surfaces, 
