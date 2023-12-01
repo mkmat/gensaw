@@ -10,6 +10,7 @@ gensaw-erase-blanks
 gensaw-density3D-to-other
 gensaw-visualization.jar
 gensaw-README.txt
+gensaw-dump2data.pl
 
 # ---------- INSTALLATION AND TESTING OF gensaw -----------
 # install gensaw and perform test runs via
