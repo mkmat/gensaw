@@ -94,7 +94,7 @@ See gensaw-README.txt and the article for details.
 	            -torsTABLE=<filename>
 
                 [-compile] (do not run)
-	            [-clean]
+	            [-clean] (asks for confirmation)
 
  	            [-d=<monomer diameter>]
 	            [-xlo=<lower box bound on x-axis>]
