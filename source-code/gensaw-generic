@@ -2,10 +2,13 @@
 
 use Term::ANSIColor;
 
-# 5 may 2021 mk@mat.ethz.ch
+#  5 may 2021 mk@mat.ethz.ch
+# 25 nov 2023 added the output=data option for lammps users
+# 01 dec 2023 added .info-file, erased two typos (py=pz and missing then-endif), added y/n to -clean
 
 use Math::Trig;
 
+$VERSION    = "gensaw version from 25 nov 2023.";
 $instdir 	= "INSTDIR"; 
 $code 		= "gensaw-algorithm";	
 $dir 		= `pwd`; chomp $dir; if ($dir eq $instdir) { print "do not run gensaw from within the installation directory\n"; exit; }; 
@@ -23,7 +26,7 @@ sub HEADER { print<<EOF;
 EOF
 }; 
 
-sub CITEAS { print<<EOF;
+$CITEAS=<<EOF;
 Related publication: 
 
 O. Weismantel, A. Galata, M. Sadeghi, A. Kroger, M. Kroger,
@@ -39,13 +42,13 @@ Comput. Phys. Commun. 270 (2021) 108176. % DOI 10.1016/j.cpc.2021.108176
  year = {2021},
  doi = {10.1016/j.cpc.2021.108176}
 }
-EOF
-};
 
-sub VERSION { print<<EOF;
-gensaw version from 5 may 2021. 
+A copy of gensaw, and its documentation in markdown format is available at 
+https://github.com/mkmat/gensaw
 EOF
-};
+
+sub CITEAS  { print "$CITEAS"; }; 
+sub VERSION { print "$VERSION"; }; 
 
 sub GREEN { print color("green"),$_[0],color("reset"); }; 
 
@@ -60,7 +63,7 @@ gensaw  -C=<number of chains>
         -N=<bonds per chain> 
         -b=<bond length>
  	-box=<linear box size>
-	-output=<dump or mol2 or xyz or Z1 or gro or pdb or ee or fn or d[3D|xy|xz|yz|rx|ry|rz]>  
+	-output=<dump or data or mol2 or xyz or Z1 or gro or pdb or ee or fn or d[3D|xy|xz|yz|rx|ry|rz]>  
 
 	-anchor0 (the default, all chains anchored at the origin)
 	-anchorPLANE=<area-per-chain> OR 
@@ -95,25 +98,25 @@ gensaw  -C=<number of chains>
 	-torsFUNC=<function-in-terms-of-phi>
 	-torsTABLE=<filename>
 
-        [-compile] (do not run)
-	[-clean]
+    [-compile] (do not run)
+	[-clean] (asks for confirmation)
 
  	[-d=<monomer diameter>]
 	[-xlo=<lower box bound on x-axis>]
-        [-xhi=<upper box bound on x-axis>]
-        [-ylo=<lower box bound on y-axis>]
-        [-yhi=<upper box bound on y-axis>]
+    [-xhi=<upper box bound on x-axis>]
+    [-ylo=<lower box bound on y-axis>]
+    [-yhi=<upper box bound on y-axis>]
 	[-zlo=<lower box bound on z-axis>]
-        [-zhi=<upper box bound on z-axis>]
+    [-zhi=<upper box bound on z-axis>]
  	[-tight] (all box sizes automatically determined)
 	[-large] (all box sizes automatically determined)
   	[-px (creates periodic box in x-direction)] 
  	[-py (creates periodic box in y-direction)]
 	[-pz (creates periodic box in z-direction)]
 	[-p (creates periodic box in all directions)]
-        [-12] (allows for overlap between 12-neighbors)
-        [-123] (further allows for overlap between 13-neighbors)
-        [-1234] (further allows for overlap between 14-neighbors)
+    [-12] (allows for overlap between 12-neighbors)
+    [-123] (further allows for overlap between 13-neighbors)
+    [-1234] (further allows for overlap between 14-neighbors)
 	[-X=<X> (manually fixes the branching functionality X)]
 	[-s=<s> (manually fixes the spacer length s between branchings)]
 	[-seed=<seed integer>]
@@ -265,6 +268,7 @@ _______________________________
 
 perl ./gensaw -C=10 -N=100 -b=1 -tight -output=d3D
 perl ./gensaw -C=10 -N=100 -b=1 -tight -output=dump
+perl ./gensaw -C=10 -N=100 -b=1 -tight -output=data
 perl ./gensaw -C=10 -N=100 -b=1 -p -torsTGG=0.4 -output=dump
 perl ./gensaw -C=10 -N=100 -b=1 -bend=68 -torsTGG=0.2 -output=dump
 perl ./gensaw -C=10 -N=100 -b=1 -bend=10 -output=dump
@@ -307,10 +311,16 @@ sub CLEANUP {
  $tmp[$#tmp+1]="config.xyz"; 
  $tmp[$#tmp+1]="config.Z1"; 
  $tmp[$#tmp+1]="config.mol2";
- $tmp[$#tmp+1]="config.data"; 
+ $tmp[$#tmp+1]="config.dump.data"; 
  $tmp[$#tmp+1]="config.gro"; 
  $tmp[$#tmp+1]="config.pdb";
  $tmp[$#tmp+1]="config.d3D";
+ $tmp[$#tmp+1]="config.dxy";
+ $tmp[$#tmp+1]="config.dxz";
+ $tmp[$#tmp+1]="config.dyz";
+ $tmp[$#tmp+1]="config.drx";
+ $tmp[$#tmp+1]="config.dry";
+ $tmp[$#tmp+1]="config.drz";
  $tmp[$#tmp+1]="_musecs_per_atom";
  $tmp[$#tmp+1]="$code.ex";
  $tmp[$#tmp+1]="$code.f90"; 
@@ -340,17 +350,21 @@ sub CLEANUP {
  $tmp[$#tmp+1]="_R2"; 
  $tmp[$#tmp+1]=".tmp_mol2_atom"; 
  $tmp[$#tmp+1]=".tmp_mol2_bond"; 
- $tmp[$#tmp+1]="config.dxy";
- $tmp[$#tmp+1]="config.dxz";
- $tmp[$#tmp+1]="config.dyz";
- $tmp[$#tmp+1]="config.drx";
- $tmp[$#tmp+1]="config.dry";
- $tmp[$#tmp+1]="config.drz";
  $tmp[$#tmp+1]="_animate_xyz_parameters";
  $tmp[$#tmp+1]="inc.overlap-used";
  $tmp[$#tmp+1]="_used_f_s";
  $tmp[$#tmp+1]=".gensaw-script";
- foreach $i (0 .. $#tmp) { `rm -rf $tmp[$i]`; }; print "cleaned.\n"; 
+ print<<EOF;
+Enter 'y' to remove all temporary gensaw files.
+Enter 'n' to remove all but the config.* files.
+Enter 'x' to exit 
+EOF
+ my $string = <STDIN>; chomp $string; 
+ if ($string eq "y") {
+    foreach $i (0 .. $#tmp) { `rm -rf $tmp[$i] $tmp[$i].info`; }; print "cleaned.\n";
+ } elsif ($string eq "n") {
+    foreach $i (0 .. $#tmp) { if ($tmp[$i]=~/config/) { } else { `rm -rf $tmp[$i] $tmp[$i].info`; }; }; print "cleaned.\n";
+ } else { exit; }; 
  if (-s ".seed") { `chmod 777 .seed`; }; if (-s ".oldseed") { `chmod 777 .oldseed`; }; 
  exit; 
 };
@@ -916,7 +930,7 @@ foreach $arg (@ARGV) { $pi=pi();
  };
 }; 
 
-open(CC,">_perl_arguments"); print CC "$calling_command"; close(CC);
+chomp $calling_command; open(CC,">_perl_arguments"); print CC "$calling_command"; close(CC);
 
 print "<hr>\n";
 
@@ -939,6 +953,7 @@ if (!$skipmany)  		{ $skipmany=0; };
 
 if    ($outputfile eq "xyz") 	  { $outputformat=1; }
 elsif ($outputfile eq "dump")  	  { $outputformat=2; }
+elsif ($outputfile eq "data")     { $outputformat=2; $dump2data=1; }
 elsif ($outputfile eq "Z1")  	  { $outputformat=3; }
 elsif ($outputfile eq "d3D")      { $outputformat=4; }
 elsif ($outputfile eq "ee")       { $outputformat=5; } 
@@ -1096,15 +1111,25 @@ if 	($outputfile eq "dxy") { `perl $instdir/gensaw-density3D-to-other $xlo $xhi 
 
 if ($copy eq 1)    { print `perl ./make_copy_test`; }; 
 
+# create data file
+if ($dump2data) { $info_data = `perl $instdir/gensaw-dump2data.pl -angles config.dump`; }; 
+
 RIS_theory;
 
 $NOTE.="note: calling command: $calling_command\n";
 
 NOTES;
 if (-s "_ee")  	   { open(ee,"<_ee"); $ee=<ee>+0; $err_ee=<ee>+0; close(ee); print "measured <R^2> = ",color("green"),"$ee +/- $err_ee",color("reset"),"\n"; };
-if (-s "_created") { open(CREATED,"<_created"); $CREATED=<CREATED>;   close(CREATED); print "created: ",color("green"),$CREATED,color("reset"); };
+if (-s "_created") { 
+    open(CREATED,"<_created"); $CREATED=<CREATED>; chomp $CREATED; $CREATED=~s/\s++//g; close(CREATED); print "created: ",color("green"),$CREATED,color("reset"),"\n"; 
+    open(CREATED,">$CREATED.info");     # added 01 dec 2023
+    print CREATED "The file $CREATED had been created via\n\nperl $0 $calling_command\n\nusing $VERSION\n\n$CITEAS\n";
+    close(CREATED);
+    print "created: ",color("green"),"$CREATED.info",color("reset"),"\n";
+};
 
 
 $suggested_praefix = "PAR$calling_command"; $suggested_praefix=~s/\"//g; $suggested_praefix=~s/ //g; 
 open(CC,">_suggested_praefix"); print CC "$suggested_praefix"; close(CC); 
 
+if ($info_data) { print "$info_data"; }; 
